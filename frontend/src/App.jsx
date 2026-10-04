@@ -681,7 +681,7 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="target-map path-map">
+                <div className="target-map path-map" onClick={pathMode === "MANUAL" ? chooseManualPathPoint : undefined}>
                   <div className="map-grid large" />
                   {OBSTACLES.map((o)=><span key={o.id} className="map-obstacle" style={{
                     left:((o.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",
@@ -714,7 +714,6 @@ export default function App() {
                   <div className="map-label bottom">{pathMode==="DRONE" ? "DRONE WILL CREATE ALL ROUTE POINTS" : "CLICK TO ADD WAYPOINTS"}</div>
                 </div>
 
-                {pathMode === "MANUAL" && <div className="path-click-layer" onClick={chooseManualPathPoint} />}
                 <div className="target-map-actions">
                   <span>{pathMode==="DRONE" ? (pathAnalyzing ? "SCANNING OBSTACLES • ANALYZING ROUTE..." : (pathPoints.length ? pathPoints.length+" DRONE-GENERATED WAYPOINTS" : "READY TO ANALYZE")) : pathPoints.length+" OPERATOR WAYPOINTS"}</span>
                   {pathMode==="MANUAL" && <button className="mode" onClick={removeLastPathPoint} disabled={!pathPoints.length}>UNDO</button>}
