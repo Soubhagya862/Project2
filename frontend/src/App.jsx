@@ -234,41 +234,49 @@ function Scene({ position, heading, target, route, detectedObstacle, sensorRange
     const forward = new THREE.Vector3(-Math.sin(a), 0, -Math.cos(a));
 
     if (fpv) {
-      // FPV/drone view: camera is mounted on the nose and looks only in flight direction.
-      const desired = new THREE.Vector3(
-        position.x + forward.x * 8,
-        position.y + 4,
-        position.z + forward.z * 8
+      // TRUE DRONE FPV: the camera is rigidly attached to the aircraft.
+      // No camera lag/lerp means the world moves naturally as the drone flies.
+      const cameraPosition = new THREE.Vector3(
+        position.x + forward.x * 3.5,
+        position.y + 1.8,
+        position.z + forward.z * 3.5
       );
-      camera.current.position.lerp(desired, Math.min(1, dt * 10));
-      const lookPoint = new THREE.Vector3(
-        position.x + forward.x * 180,
-        position.y + 2,
-        position.z + forward.z * 180
-      );
+      camera.current.position.copy(cameraPosition);
+
+      const lookPoint = cameraPosition.clone()
+        .add(forward.clone().multiplyScalar(250));
       camera.current.lookAt(lookPoint);
-      camera.current.fov = THREE.MathUtils.lerp(camera.current.fov, 78, Math.min(1, dt * 8));
+
+      // Keep the FPV horizon stable instead of copying drone roll/flapping.
+      camera.current.rotation.z = 0;
+
+      const desiredFov = 82;
+      camera.current.fov = THREE.MathUtils.lerp(
+        camera.current.fov,
+        desiredFov,
+        Math.min(1, dt * 10)
+      );
       camera.current.updateProjectionMatrix();
     } else {
-      // Stationary/ready view: operator camera remains outside the drone.
-      const desired = new THREE.Vector3(position.x + 620, position.y + 520, position.z + 700);
+      // Outside operator view while stationary.
+      const desired = new THREE.Vector3(
+        position.x + 620,
+        position.y + 520,
+        position.z + 700
+      );
       camera.current.position.lerp(desired, Math.min(1, dt * 2.4));
       camera.current.lookAt(position.x, position.y, position.z);
-      camera.current.fov = THREE.MathUtils.lerp(camera.current.fov, 48, Math.min(1, dt * 5));
+      camera.current.fov = THREE.MathUtils.lerp(
+        camera.current.fov,
+        48,
+        Math.min(1, dt * 5)
+      );
       camera.current.updateProjectionMatrix();
     }
   });
   return (
     <>
       <PerspectiveCamera ref={camera} makeDefault position={[620, 550, 700]} fov={48} />
-      {fpv && (
-        <group>
-          <mesh position={[position.x, position.y, position.z]}>
-            <sphereGeometry args={[0.25, 12, 8]} />
-            <meshBasicMaterial color="#58e7ff" />
-          </mesh>
-        </group>
-      )}
       <ambientLight intensity={1.4} />
       <directionalLight position={[300, 700, 250]} intensity={2.6} castShadow />
       <Grid args={[4500, 4500]} cellSize={50} sectionSize={250} fadeDistance={3200} />
