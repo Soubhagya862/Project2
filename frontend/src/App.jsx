@@ -151,7 +151,7 @@ function App(){
    const r=await calculate(pos,safe);if(r.length){setMessage("Destination locked — safe route calculated");await createMission(safe,r);}
  }
  async function createMission(targetPoint=target,routeInput=path){
-   if(!destinationChosen){setMessage("Choose a destination first");return null}
+   if(!targetPoint){setMessage("Choose a destination first");return null}
    const r=routeInput?.length?routeInput:await calculate(pos,targetPoint);if(!r.length)return null;
    try{const res=await fetch(API+"/missions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({start:HOME,target:targetPoint,route:r,gpsStatus:gps?"CONNECTED":"DENIED",status:"READY",phase:"PLANNED"})});if(!res.ok)throw Error();
     const m=await res.json();setMission(m);missionRef.current=m;setStatus("MISSION CREATED");setPhase("PLANNED");setMessage("Mission saved and ready");return m;
