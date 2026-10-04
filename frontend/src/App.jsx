@@ -673,18 +673,27 @@ export default function App() {
 
               {targetSelectionPhase === "PATH" && (
                 <>
-                  <Line
-                    points={[
-                      [position.x, 0, position.z],
-                      ...pathPoints.map(p => [p.x, 0, p.z]),
-                      [pendingTarget.x, 0, pendingTarget.z]
-                    ]}
-                    color="#58e7ff"
-                    lineWidth={2}
-                    dashed
-                    dashSize={10}
-                    gapSize={5}
-                  />
+                  {[
+                    { x:position.x, z:position.z },
+                    ...pathPoints,
+                    pendingTarget
+                  ].slice(0,-1).map((p,i,arr) => {
+                    const n = [
+                      { x:position.x, z:position.z },
+                      ...pathPoints,
+                      pendingTarget
+                    ][i+1];
+                    const x1 = ((p.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100;
+                    const y1 = ((p.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100;
+                    const x2 = ((n.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100;
+                    const y2 = ((n.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100;
+                    const length = Math.hypot(x2-x1,y2-y1);
+                    const angle = Math.atan2(y2-y1,x2-x1)*180/Math.PI;
+                    return <span key={"seg-"+i} className="map-path-segment" style={{
+                      left:x1+"%", top:y1+"%", width:length+"%",
+                      transform:"rotate("+angle+"deg)"
+                    }} />;
+                  })}
                   {pathPoints.map((p,i) => (
                     <span key={i} className="map-waypoint" style={{
                       left:((p.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",
