@@ -159,8 +159,6 @@ export default function App() {
     TARGET.z - HOME.z
   );
 
-  useFrameSimulation(position, missionState, setPosition, setHeading, setSpeed, setBattery, setMissionState);
-
   // Simulated onboard estimator: GPS is not used here.
   useMemo(() => {
     const timer = setInterval(() => {
@@ -293,6 +291,15 @@ export default function App() {
               <color attach="background" args={["#07131c"]} />
               <fog attach="fog" args={["#07131c", 700, 2200]} />
               <MonitorScene position={position} heading={heading} />
+              <SimulationEngine
+                position={position}
+                missionState={missionState}
+                setPosition={setPosition}
+                setHeading={setHeading}
+                setSpeed={setSpeed}
+                setBattery={setBattery}
+                setMissionState={setMissionState}
+              />
             </Canvas>
 
             <div className="monitor-hud">
@@ -363,20 +370,18 @@ export default function App() {
   );
 }
 
-function useFrameSimulation(
+function SimulationEngine({
   position,
   missionState,
   setPosition,
   setHeading,
   setSpeed,
   setBattery,
-  setMissionState
-) {
-  const stateRef = useRef(position);
+  setMissionState,
+}) {
+  const stateRef = useRef({ ...position });
 
   useFrame((_, dt) => {
-    if (!stateRef.current) stateRef.current = { ...position };
-
     if (missionState !== "AUTONOMOUS" && missionState !== "RETURNING") {
       setSpeed(0);
       return;
@@ -393,7 +398,7 @@ function useFrameSimulation(
       stateRef.current = { ...target };
       setPosition({ ...target });
       setSpeed(0);
-      setMissionState(missionState === "RETURNING" ? "LANDED" : "LANDED");
+      setMissionState("LANDED");
       return;
     }
 
@@ -410,4 +415,6 @@ function useFrameSimulation(
     setHeading((newHeading + 360) % 360);
     setBattery((b) => Math.max(0, b - dt * 0.018));
   });
+
+  return null;
 }
