@@ -69,97 +69,121 @@ function Obstacle({ o }) {
   );
 }
 
-function Drone({ position, heading, flying }) {
+function Drone({ position, heading, flying, bank = 0, pitch = 0 }) {
   const group = useRef();
   const props = useRef([]);
+  const body = useRef();
 
   useFrame((_, dt) => {
     if (!group.current) return;
+
     group.current.rotation.y = THREE.MathUtils.lerp(
-      group.current.rotation.y,
-      heading,
-      Math.min(1, dt * 7)
+      group.current.rotation.y, heading, Math.min(1, dt * 8)
+    );
+    group.current.rotation.z = THREE.MathUtils.lerp(
+      group.current.rotation.z, bank, Math.min(1, dt * 6)
+    );
+    group.current.rotation.x = THREE.MathUtils.lerp(
+      group.current.rotation.x, pitch, Math.min(1, dt * 6)
     );
 
-    props.current.forEach((p) => {
-      if (p && flying) p.rotation.y += dt * 45;
+    props.current.forEach((p, i) => {
+      if (p && flying) {
+        p.rotation.y += dt * (i % 2 === 0 ? 55 : -55);
+      }
     });
+
+    if (body.current && flying) {
+      body.current.position.y = Math.sin(performance.now() * 0.006) * 0.12;
+    }
   });
 
-  const rotors = [
-    [-4.8, 1.2, -3.4],
-    [4.8, 1.2, -3.4],
-    [-4.8, 1.2, 3.4],
-    [4.8, 1.2, 3.4]
+  const motors = [
+    [-7.2, 0.7, -5.2],
+    [7.2, 0.7, -5.2],
+    [-7.2, 0.7, 5.2],
+    [7.2, 0.7, 5.2]
   ];
 
   return (
     <group ref={group} position={[position.x, position.y, position.z]} scale={[5.5, 5.5, 5.5]}>
-      {/* Large professional quadcopter body */}
-      <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
-        <capsuleGeometry args={[2.2, 5.2, 8, 24]} />
-        <meshStandardMaterial color="#263238" metalness={0.85} roughness={0.2} />
-      </mesh>
-
-      {/* Central equipment/camera housing */}
-      <mesh position={[0, -1.2, -0.8]} castShadow>
-        <boxGeometry args={[2.8, 1.4, 2.4]} />
-        <meshStandardMaterial color="#111820" metalness={0.8} roughness={0.25} />
-      </mesh>
-
-      {/* Front camera */}
-      <mesh position={[0, -1.8, -2.0]}>
-        <sphereGeometry args={[0.7, 24, 16]} />
-        <meshStandardMaterial color="#00e5ff" emissive="#007a91" emissiveIntensity={2} />
-      </mesh>
-
-      {/* Large left and right wings */}
-      <mesh position={[-4.2, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <boxGeometry args={[1.8, 6.5, 0.45]} />
-        <meshStandardMaterial color="#1565c0" metalness={0.75} roughness={0.22} />
-      </mesh>
-      <mesh position={[4.2, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <boxGeometry args={[1.8, 6.5, 0.45]} />
-        <meshStandardMaterial color="#1565c0" metalness={0.75} roughness={0.22} />
-      </mesh>
-
-      {/* Rotor arms */}
-      {rotors.map(([x, y, z], i) => (
-        <group key={i} position={[x * 0.55, 0, z * 0.55]}>
-          <mesh rotation={[0, Math.atan2(z, x), 0]} castShadow>
-            <boxGeometry args={[0.45, 0.45, 7.5]} />
-            <meshStandardMaterial color="#455a64" metalness={0.85} roughness={0.18} />
-          </mesh>
-
-          {/* Motor */}
-          <mesh position={[0, 0.7, 0]} castShadow>
-            <cylinderGeometry args={[0.7, 0.7, 0.9, 24]} />
-            <meshStandardMaterial color="#151b20" metalness={0.9} roughness={0.15} />
-          </mesh>
-
-          {/* Animated propeller */}
-          <group ref={(el) => (props.current[i] = el)} position={[0, 1.3, 0]}>
-            <mesh>
-              <boxGeometry args={[5.2, 0.10, 0.35]} />
-              <meshStandardMaterial color="#90caf9" metalness={0.35} roughness={0.3} />
-            </mesh>
-            <mesh rotation={[0, Math.PI / 2, 0]}>
-              <boxGeometry args={[5.2, 0.10, 0.35]} />
-              <meshStandardMaterial color="#90caf9" metalness={0.35} roughness={0.3} />
-            </mesh>
-          </group>
-        </group>
-      ))}
-
-      {/* Landing legs */}
-      {[[-2.8, -1.4, -2.0], [2.8, -1.4, -2.0], [-2.8, -1.4, 2.0], [2.8, -1.4, 2.0]].map((p, i) => (
-        <mesh key={i} position={p} castShadow>
-          <cylinderGeometry args={[0.22, 0.22, 2.2, 12]} />
-          <meshStandardMaterial color="#37474f" metalness={0.75} />
+      <group ref={body}>
+        {/* aerodynamic central fuselage */}
+        <mesh castShadow>
+          <capsuleGeometry args={[2.5, 5.8, 10, 32]} />
+          <meshStandardMaterial color="#18232b" metalness={0.9} roughness={0.18} />
         </mesh>
-      ))}
 
-      <pointLight position={[0, -2.0, -3.0]} intensity={6} distance={30} color="#42e8ff" />
+        {/* upper aerodynamic shell */}
+        <mesh position={[0, 0.9, 0]} scale={[1.15, 0.38, 1.55]} castShadow>
+          <sphereGeometry args={[3.2, 32, 20]} />
+          <meshStandardMaterial color="#263942" metalness={0.85} roughness={0.2} />
+        </mesh>
+
+        {/* front sensor/gimbal */}
+        <group position={[0, -1.5, -2.8]}>
+          <mesh castShadow>
+            <sphereGeometry args={[1.0, 32, 20]} />
+            <meshStandardMaterial color="#080d12" metalness={0.75} roughness={0.18} />
+          </mesh>
+          <mesh position={[0, 0, -0.72]}>
+            <sphereGeometry args={[0.5, 24, 16]} />
+            <meshStandardMaterial color="#12dfff" emissive="#007a91" emissiveIntensity={3} />
+          </mesh>
+        </group>
+
+        {/* aerodynamic X-shaped arms / wings */}
+        {motors.map(([x, y, z], i) => {
+          const angle = Math.atan2(z, x);
+          return (
+            <group key={i} position={[x * 0.42, 0, z * 0.42]} rotation={[0, -angle, 0]}>
+              <mesh castShadow>
+                <boxGeometry args={[0.75, 0.55, 9.2]} />
+                <meshStandardMaterial color="#344b57" metalness={0.9} roughness={0.16} />
+              </mesh>
+
+              {/* carbon-fiber style wing fin */}
+              <mesh position={[0, 0.05, 3.2]} rotation={[0.12, 0, 0]} castShadow>
+                <boxGeometry args={[2.2, 0.18, 3.6]} />
+                <meshStandardMaterial color="#0d6678" metalness={0.8} roughness={0.2} />
+              </mesh>
+
+              {/* motor */}
+              <mesh position={[0, 0.75, 4.3]} castShadow>
+                <cylinderGeometry args={[1.05, 1.15, 1.0, 32]} />
+                <meshStandardMaterial color="#101820" metalness={0.95} roughness={0.12} />
+              </mesh>
+
+              {/* spinning propeller */}
+              <group ref={(el) => (props.current[i] = el)} position={[0, 1.35, 4.3]}>
+                <mesh>
+                  <boxGeometry args={[6.8, 0.14, 0.42]} />
+                  <meshStandardMaterial color="#b9ecff" metalness={0.25} roughness={0.22} transparent opacity={0.8} />
+                </mesh>
+                <mesh rotation={[0, Math.PI / 2, 0]}>
+                  <boxGeometry args={[6.8, 0.14, 0.42]} />
+                  <meshStandardMaterial color="#b9ecff" metalness={0.25} roughness={0.22} transparent opacity={0.8} />
+                </mesh>
+                <mesh position={[0, 0.08, 0]}>
+                  <cylinderGeometry args={[0.25, 0.25, 0.25, 20]} />
+                  <meshStandardMaterial color="#e0f7ff" metalness={0.8} />
+                </mesh>
+              </group>
+            </group>
+          );
+        })}
+
+        {/* landing gear */}
+        {[[-3.5, -1.9, -2.5], [3.5, -1.9, -2.5], [-3.5, -1.9, 2.5], [3.5, -1.9, 2.5]].map((p, i) => (
+          <mesh key={i} position={p} rotation={[0, 0, i % 2 ? -0.12 : 0.12]} castShadow>
+            <cylinderGeometry args={[0.25, 0.3, 2.8, 16]} />
+            <meshStandardMaterial color="#26343c" metalness={0.9} roughness={0.18} />
+          </mesh>
+        ))}
+
+        <pointLight position={[0, -2.0, -3.5]} intensity={8} distance={45} color="#20e6ff" />
+        <pointLight position={[0, 1.0, 3.0]} intensity={3} distance={25} color="#ff3344" />
+      </group>
     </group>
   );
 }
@@ -178,7 +202,7 @@ function Marker({ point, color }) {
   );
 }
 
-function Scene({ position, heading, flying }) {
+function Scene({ position, heading, flying, bank, pitch }) {
   return (
     <>
       <PerspectiveCamera makeDefault position={[110, 95, 170]} fov={50} />
@@ -193,7 +217,7 @@ function Scene({ position, heading, flying }) {
       {OBSTACLES.map((o, i) => <Obstacle key={i} o={o} />)}
       <Marker point={HOME} color="#ffd34d" />
       <Marker point={TARGET} color="#4dff9a" />
-      <Drone position={position} heading={heading} flying={flying} />
+      <Drone position={position} heading={heading} flying={flying} bank={bank} pitch={pitch} />
       <OrbitControls enableDamping dampingFactor={0.08} />
     </>
   );
@@ -225,7 +249,7 @@ export default function App() {
   const [phase, setPhase] = useState("ON GROUND");
   const [battery, setBattery] = useState(100);
   const [speed, setSpeed] = useState(0);
-  const [heading, setHeading] = useState(0);
+  const [heading, setHeading] = useState(0);\n  const [bank, setBank] = useState(0);\n  const [pitch, setPitch] = useState(0);
   const [gps, setGps] = useState(true);
   const [missionProgress, setMissionProgress] = useState(0);
   const [message, setMessage] = useState("Drone is ready on the launch stand.");
@@ -428,7 +452,7 @@ export default function App() {
               <ControlButton onDown={() => setMode("MANUAL")}>S</ControlButton>
               <ControlButton onDown={() => setMode("MANUAL")}>D</ControlButton>
             </div>
-            <p className="help">W = FORWARD · S = BACK · A = LEFT · D = RIGHT</p>
+            <p className="help">W/S = FORWARD/BACK · A/D = STRAFE · Q/E = 360 ROTATE · R/F = TILT</p>
           </div>
 
           <div className="control-section">
@@ -462,7 +486,7 @@ export default function App() {
             <Canvas shadows>
               <color attach="background" args={["#07131c"]} />
               <fog attach="fog" args={["#07131c", 450, 1300]} />
-              <Scene position={position} heading={heading} flying={flying} />
+              <Scene position={position} heading={heading} flying={flying} bank={bank} pitch={pitch} />
             </Canvas>
 
             <div className="hud">
