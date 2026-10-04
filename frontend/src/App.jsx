@@ -129,7 +129,7 @@ function TargetMarker({target,home=false}){
 }
 
 function App(){
- const socketRef=useRef(null),idx=useRef(0),pathRef=useRef([]),missionRef=useRef(null),replanLock=useRef(false),returning=useRef(false);
+ const socketRef=useRef(null),idx=useRef(0),pathRef=useRef([]),missionRef=useRef(null),replanLock=useRef(false),returning=useRef(false),manualAnnounced=useRef(false);
  const [pos,setPos]=useState({...HOME}),[target,setTarget]=useState({x:700,y:60,z:450}),[path,setPath]=useState([]);
  const [obstacles,setObstacles]=useState(BASE_OBSTACLES),[gps,setGps]=useState(true),[mode,setMode]=useState("MANUAL");
  const [status,setStatus]=useState("READY"),[phase,setPhase]=useState("IDLE"),[speed,setSpeed]=useState(0),[heading,setHeading]=useState(0);
@@ -174,7 +174,7 @@ function App(){
 
  function manualMove(cmd){
    if(pos.y<=2.5){setMessage("Drone is on the ground — use TAKEOFF first");return}
-   setMode("MANUAL");setStatus("MANUAL FLIGHT");setPhase("USER CONTROL");setSpeed(8);
+   setMode("MANUAL");setStatus("MANUAL FLIGHT");setPhase("USER CONTROL");setSpeed(8);if(!manualAnnounced.current){manualAnnounced.current=true;speak("Your drone is going towards the location");setMessage("Your drone is going towards the location");}
    const step=12, map={UP:[0,-step],DOWN:[0,step],LEFT:[-step,0],RIGHT:[step,0],UP_LEFT:[-step,-step],UP_RIGHT:[step,-step],DOWN_LEFT:[-step,step],DOWN_RIGHT:[step,step]};
    const [dx,dz]=map[cmd]||[0,0]; if(!map[cmd])return;
    setHeading(Math.atan2(-dz,-dx)*180/Math.PI);
@@ -186,8 +186,10 @@ function App(){
    if(takeoffCountdown!==null)return;
    const r=path.length?path:await calculate(); if(!r.length)return;
    for(let i=5;i>0;i--){setTakeoffCountdown(i);await new Promise(res=>setTimeout(res,1000))}
-   setTakeoffCountdown(null);setPos(p=>({...p,y:30}));setStatus("READY FOR TAKEOFF");setPhase("TAKEOFF COMPLETE");setSpeed(0);
-   speak("Your drone is ready to take off");await new Promise(res=>setTimeout(res,700));
+   setTakeoffCountdown(null);setPos(p=>({...p,y:30}));setStatus("READY FOR TAKEOFF");setPhase("TAKEOFF COMPLETE");setSpeed(0);manualAnnounced.current=false;
+   speak("Your drone is ready to take off");
+   if(mode==="MANUAL"){setMessage("Your drone is ready — manual flight enabled");return}
+   await new Promise(res=>setTimeout(res,700));
    returning.current=false;setLanding(false);setMode(gps?"AUTOPILOT":"EMERGENCY AUTOPILOT");setStatus(gps?"AUTOPILOT ACTIVE":"EMERGENCY AUTOPILOT");setPhase(gps?"GOING TOWARDS TARGET":"GPS LOST — SENSOR NAVIGATION");setSpeed(50);setMessage("Your drone is going towards the location");speak("Your drone is going towards the location");await patchMission({status:gps?"AUTOPILOT":"EMERGENCY AUTOPILOT",phase:gps?"GOING TOWARDS TARGET":"GPS LOST — SENSOR NAVIGATION"});
  }
 
