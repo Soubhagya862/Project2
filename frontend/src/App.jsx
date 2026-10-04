@@ -19,35 +19,6 @@ const baseObstacles=[
   {position:{x:70,y:4,z:-22},size:{x:8,y:8,z:8},type:"DEBRIS"}
 ];
 
-mport {useEffect,useMemo,useRef,useState} from "react";
-import {Canvas,useFrame,useThree} from "@react-three/fiber";
-import {Grid,Line} from "@react-three/drei";
-import * as THREE from "three";
-import {io} from "socket.io-client";
-import TelemetryPanel from "./components/TelemetryPanel";
-import MissionMonitor from "./components/MissionMonitor";
-import DroneSensors from "./components/DroneSensors";
-
-const API=import.meta.env.VITE_API_URL||"http://localhost:5000/api";
-const SOCKET_URL=import.meta.env.VITE_SOCKET_URL||"http://localhost:5000";
-const HOME={x:0,y:10,z:0};
-
-const baseObstacles=[
-  {position:{x:24,y:4,z:8},size:{x:7,y:8,z:7},type:"ROCK"},
-  {position:{x:42,y:3,z:-8},size:{x:6,y:6,z:6},type:"TREE"},
-  {position:{x:58,y:5,z:14},size:{x:10,y:10,z:5},type:"WALL"},
-  {position:{x:35,y:2.5,z:25},size:{x:5,y:5,z:5},type:"POLE"},
-  {position:{x:70,y:4,z:-22},size:{x:8,y:8,z:8},type:"DEBRIS"}
-];
-
-const cityBuildings=Array.from({length:30},(_,i)=>({
-  x:-35+(i*17)%105,
-  z:-42+((i*29)%84),
-  w:6+(i%4)*2,
-  d:6+(i%3)*2,
-  h:10+(i%7)*6
-})).filter(b=>Math.hypot(b.x,b.z)>10);
-
 function DroneModel({p,heading}){
   const group=useRef();
   useFrame((_,d)=>{
@@ -114,14 +85,6 @@ const baseObstacles=[
   {position:{x:70,y:4,z:-22},size:{x:8,y:8,z:8},type:"DEBRIS"}
 ];
 
-const cityBuildings=Array.from({length:30},(_,i)=>({
-  x:-35+(i*17)%105,
-  z:-42+((i*29)%84),
-  w:6+(i%4)*2,
-  d:6+(i%3)*2,
-  h:10+(i%7)*6
-})).filter(b=>Math.hypot(b.x,b.z)>10);
-
 function DroneModel({p,heading}){
   const group=useRef();
   useFrame((_,d)=>{
@@ -145,18 +108,6 @@ function DroneModel({p,heading}){
     <pointLight position={[0,-.7,-1.2]} intensity={2} distance={7}/>
   </group>;
 }
-
-function Building({b}){return <group position={[b.x,b.h/2,b.z]}>
-  <mesh castShadow receiveShadow><boxGeometry args={[b.w,b.h,b.d]}/><meshStandardMaterial metalness={.25} roughness={.65}/></mesh>
-  {Array.from({length:Math.max(1,Math.floor(b.h/4))},(_,r)=>(
-    <group key={r} position={[0,-b.h/2+2+r*4,0]}>
-      <mesh position={[0,0,b.d/2+.02]}><boxGeometry args={[b.w*.72,.8,.06]}/><meshStandardMaterial emissive={new THREE.Color("#5ddcff")} emissiveIntensity={.55}/></mesh>
-      <mesh position={[0,0,-b.d/2-.02]}><boxGeometry args={[b.w*.72,.8,.06]}/><meshStandardMaterial emissive={new THREE.Color("#5ddcff")} emissiveIntensity={.35}/></mesh>
-    </group>
-  ))}
-</group>}
-
-function City(){return <group>{cityBuildings.map((b,i)=><Building key={i} b={b}/>)}</group>}
 
 function Obstacle({o,dynamic=false}){
   const colors={ROCK:"#77736b",TREE:"#245b35",WALL:"#8b765e",POLE:"#55585c",DEBRIS:"#6b6258"};
