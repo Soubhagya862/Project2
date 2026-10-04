@@ -23,3 +23,7 @@ button{font-family:inherit}
 .mission-stats{display:grid;grid-template-columns:1fr 1fr;gap:7px;align-content:center}.mission-stats .metric{padding:9px}
 @media(max-width:1100px){.dashboard{grid-template-columns:225px minmax(0,1fr)}.right-panel{grid-column:1/3;grid-row:2;max-height:245px;border-left:0;border-top:1px solid #29465d;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.right-panel>.panel-title{grid-column:1/-1}.bottom-monitor{height:155px;flex-basis:155px}}
 @media(max-width:750px){html,body,#root{overflow:auto}.app{height:auto;min-height:100vh}.topbar{height:auto;flex-basis:auto;min-height:70px}.dashboard{height:auto;display:flex;flex-direction:column;overflow:visible}.left-panel,.right-panel{border:0}.monitor{height:500px;min-height:500px}.right-panel{display:block;max-height:none}.bottom-monitor{height:auto;min-height:290px;display:flex;flex-direction:column}.mini-map{height:180px}.monitor-hud span:nth-child(n+4){display:none}}
+
+
+.view-mode{position:absolute;z-index:5;top:12px;right:12px;padding:8px 11px;border:1px solid #31536b;border-radius:7px;background:rgba(3,12,22,.86);color:#7895ad;font-size:8px;font-weight:900;letter-spacing:1px;pointer-events:none}
+.view-mode.fpv-active{border-color:#58e7ff;color:#58e7ff;box-shadow:0 0 14px #58e7ff33}
