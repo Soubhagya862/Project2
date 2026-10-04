@@ -18,6 +18,7 @@ const io=new SocketIOServer(httpServer,{
 });
 
 const connectedClients=new Map();
+let latestFlightCommand={id:0,command:"HOVER",time:Date.now()};
 
 io.on("connection",socket=>{
   connectedClients.set(socket.id,{role:"unknown"});
@@ -63,6 +64,16 @@ io.on("connection",socket=>{
 
 app.use(cors({origin:process.env.CLIENT_URL||"*"}));
 app.use(express.json({limit:"1mb"}));
+
+app.post("/api/flight-command",(req,res)=>{
+  const command=typeof req.body?.command==="string"?req.body.command:"";
+  if(!command)return res.status(400).json({ok:false,error:"command required"});
+  latestFlightCommand={id:latestFlightCommand.id+1,command,time:Date.now()};
+  io.emit("flight-control-command",command);
+  res.json({ok:true,...latestFlightCommand});
+});
+
+app.get("/api/flight-command",(req,res)=>res.json({ok:true,...latestFlightCommand}));
 
 app.get("/api/health",(req,res)=>res.json({
   ok:true,
