@@ -191,12 +191,13 @@ function App(){
    if(!destinationChosen){setMessage("CHOOSE DESTINATION before takeoff");return}
    if(takeoffCountdown!==null)return;
    const r=path.length?path:await calculate(); if(!r.length)return;
+   setStatus("TAKEOFF PREPARING");setPhase("TAKEOFF COUNTDOWN");setSpeed(0);
    for(let i=5;i>0;i--){setTakeoffCountdown(i);await new Promise(res=>setTimeout(res,1000))}
-   setTakeoffCountdown(null);setPos(p=>({...p,y:30}));setStatus("READY FOR TAKEOFF");setPhase("TAKEOFF COMPLETE");setSpeed(0);manualAnnounced.current=false;
-   speak("Your drone is ready to take off");
-   if(mode==="MANUAL"){setMessage("Your drone is ready — manual flight enabled");return}
-   await new Promise(res=>setTimeout(res,700));
-   returning.current=false;setLanding(false);setMode(gps?"AUTOPILOT":"EMERGENCY AUTOPILOT");setStatus(gps?"AUTOPILOT ACTIVE":"EMERGENCY AUTOPILOT");setPhase(gps?"GOING TOWARDS TARGET":"GPS LOST — SENSOR NAVIGATION");setSpeed(50);setMessage("Your drone is going towards the location");speak("Your drone is going towards the location");await patchMission({status:gps?"AUTOPILOT":"EMERGENCY AUTOPILOT",phase:gps?"GOING TOWARDS TARGET":"GPS LOST — SENSOR NAVIGATION"});
+   setTakeoffCountdown(null);
+   setPos(p=>({...p,y:30}));
+   setStatus("AIRBORNE");setPhase("MANUAL FLIGHT READY");setMode("MANUAL");setSpeed(0);setLanding(false);manualAnnounced.current=false;
+   setMessage("Drone is airborne — use phone controller to fly");
+   speak("Your drone is ready to fly");
  }
 
  async function stopFlight(){setMode("MANUAL");setStatus("STOPPED");setPhase("MANUAL");setSpeed(0);setLanding(false);await patchMission({status:"STOPPED",phase:"MANUAL"})}
@@ -234,19 +235,31 @@ function App(){
    }catch{setStatus("REPLANNING ERROR");setMessage("Backend replan unavailable")}finally{setTimeout(()=>{replanLock.current=false},700)}
  }
 
- useEffect(()=>{
-  const s=io(SOCKET_URL);socketRef.current=s;s.on("connect",()=>setPhoneConnected(true));s.on("disconnect",()=>setPhoneConnected(false));
-  s.on("phone-control",async cmd=>{
+ const commandHandlerRef=useRef(null);
+ commandHandlerRef.current=async cmd=>{
    setPhoneCommand(cmd);
-   if(cmd==="START")startAutopilot();
-   else if(cmd==="STOP"||cmd==="LAND")stopFlight();
-   else if(cmd==="EMERGENCY")emergencyAutopilot();
-   else if(cmd==="GPS_TOGGLE")toggleGps();
-   else if(cmd.startsWith("TARGET:")){try{const t=JSON.parse(cmd.slice(7));await chooseTarget(t);setRemoteControl("TARGET")}catch{setMessage("Invalid remote target")}}
-   else manualMove(cmd);
-  });
+   setRemoteControl(cmd);
+   if(cmd==="START")return startAutopilot();
+   if(cmd==="STOP")return stopFlight();
+   if(cmd==="LAND")return stopFlight();
+   if(cmd==="EMERGENCY")return emergencyAutopilot();
+   if(cmd==="GPS_TOGGLE")return toggleGps();
+   if(cmd.startsWith("TARGET:")){
+     try{const t=JSON.parse(cmd.slice(7));await chooseTarget(t);setRemoteControl("TARGET")}
+     catch{setMessage("Invalid remote target")}
+     return;
+   }
+   manualMove(cmd);
+ };
+
+ useEffect(()=>{
+  const s=io(SOCKET_URL,{transports:["websocket","polling"],reconnection:true});
+  socketRef.current=s;
+  s.on("connect",()=>setPhoneConnected(true));
+  s.on("disconnect",()=>setPhoneConnected(false));
+  s.on("phone-control",cmd=>commandHandlerRef.current?.(cmd));
   return()=>s.disconnect();
- },[gps,destinationChosen,target,path,pos,obstacles,mode]);
+ },[]);
 
  useEffect(()=>{
   if(!["AUTOPILOT","EMERGENCY AUTOPILOT"].includes(mode)||!path.length)return;
@@ -282,10 +295,13 @@ function App(){
  },[landing]);
 
  useEffect(()=>{
-  if(!mission?._id)return;
-  const timer=setInterval(()=>{fetch(API+"/telemetry",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({missionId:mission._id,position:pos,altitude:pos.y,speed,heading,gpsStatus:gps?"CONNECTED":"DENIED",obstacleDetected:sensor,sensorDistance,status,phase,mode})}).catch(()=>{});
-   socketRef.current?.emit("phone-telemetry",{x:pos.x,y:pos.y,z:pos.z,speed,heading,gps:gps?"CONNECTED":"DENIED",status,phase,mode,target,home:HOME,distanceToTarget:distance(pos,target),sensorDistance});
-  },400);return()=>clearInterval(timer)
+  const timer=setInterval(()=>{
+    socketRef.current?.emit("phone-telemetry",{x:pos.x,y:pos.y,z:pos.z,speed,heading,gps:gps?"CONNECTED":"DENIED",status,phase,mode,target,home:HOME,distanceToTarget:distance(pos,target),sensorDistance});
+    if(mission?._id){
+      fetch(API+"/telemetry",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({missionId:mission._id,position:pos,altitude:pos.y,speed,heading,gpsStatus:gps?"CONNECTED":"DENIED",obstacleDetected:sensor,sensorDistance,status,phase,mode})}).catch(()=>{});
+    }
+  },400);
+  return()=>clearInterval(timer);
  },[mission,pos,speed,heading,gps,sensor,sensorDistance,status,phase,mode,target]);
 
  const dist=distance(pos,target),eta=Math.ceil(dist/50);
