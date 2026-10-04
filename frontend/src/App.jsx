@@ -123,7 +123,7 @@ function TargetMarker({target,home=false}){return <group position={[target.x,tar
  </group>;}
 
 function App(){
- const socketRef=useRef(null),idx=useRef(0),pathRef=useRef([]),missionRef=useRef(null),replanLock=useRef(false),returning=useRef(false),manualAnnounced=useRef(false),manualMotionRef=useRef({vx:0,vy:0,vz:0,yaw:0,until:0}),lastCommandIdRef=useRef(0),commandBusyRef=useRef(false);
+ const socketRef=useRef(null),idx=useRef(0),pathRef=useRef([]),missionRef=useRef(null),replanLock=useRef(false),returning=useRef(false),manualAnnounced=useRef(false),manualMotionRef=useRef({vx:0,vy:0,vz:0,yaw:0,until:0}),lastCommandIdRef=useRef(0),commandBusyRef=useRef(false),landingBusyRef=useRef(false);
  const [pos,setPos]=useState({...HOME}),[target,setTarget]=useState({x:700,y:60,z:450}),[path,setPath]=useState([]);
  const [obstacles,setObstacles]=useState(BASE_OBSTACLES),[gps,setGps]=useState(true),[mode,setMode]=useState("MANUAL");
  const [status,setStatus]=useState("READY"),[phase,setPhase]=useState("IDLE"),[speed,setSpeed]=useState(0),[heading,setHeading]=useState(0);
@@ -168,21 +168,26 @@ function App(){
    if(yaw)setPhase(cmd==="YAW_LEFT"?"YAW LEFT":"YAW RIGHT");else if(vy>0)setPhase("ASCENDING");else if(vy<0)setPhase("DESCENDING");
  }
  async function startAutopilot(){
-   if(commandBusyRef.current)return;
+   if(commandBusyRef.current||takeoffCountdown!==null||flying)return;
    commandBusyRef.current=true;
-   if(takeoffCountdown!==null)return;
-   if(destinationChosen&&!path.length){const r=await calculate();if(!r.length)return}
-   setTakeoffCountdown(null);setLanding(false);setStatus("TAKEOFF");setPhase("TAKEOFF COMPLETE");
-   setMessage("Drone is ready to take up");speak("Drone is ready to take up");setPos(p=>({...p,y:30}));
-   setStatus("AIRBORNE");setPhase("MANUAL FLIGHT READY");setMode("MANUAL");setSpeed(0);
-   manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,until:0};manualAnnounced.current=false;setMessage("Drone is airborne — use phone controller to fly");
-   commandBusyRef.current=false;
+   try{
+     setLanding(false);returning.current=false;setTakeoffCountdown(null);setMode("MANUAL");
+     setStatus("TAKEOFF");setPhase("REMOTE TAKE OFF COMMAND");setSpeed(0);setMessage("TAKE OFF command received");
+     speak("Drone is taking off");
+     await new Promise(r=>setTimeout(r,250));
+     setPos(p=>({...p,y:30}));
+     setStatus("AIRBORNE");setPhase("MANUAL FLIGHT READY");setMode("MANUAL");setSpeed(0);
+     manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,until:0};manualAnnounced.current=false;
+     setMessage("AIRBORNE — controller commands are active");
+   }finally{commandBusyRef.current=false}
  }
  async function stopFlight(){
+   if(landingBusyRef.current)return;
+   landingBusyRef.current=true;
    manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,until:0};setLanding(false);setMode("MANUAL");setStatus("LANDING");setPhase("REMOTE LAND COMMAND");setSpeed(3);
-   const startY=pos.y;if(startY<=2.5){setPos(p=>({...p,y:2}));setSpeed(0);setStatus("LANDED");setPhase("LANDED");return}
+   const startY=pos.y;if(startY<=2.5){setPos(p=>({...p,y:2}));setSpeed(0);setStatus("LANDED");setPhase("LANDED");landingBusyRef.current=false;return}
    const steps=Math.max(1,Math.ceil((startY-2)/2));for(let i=1;i<=steps;i++){await new Promise(r=>setTimeout(r,80));setPos(p=>({...p,y:Math.max(2,startY-(startY-2)*(i/steps))}))}
-   setSpeed(0);setStatus("LANDED");setPhase("LANDED");await patchMission({status:"LANDED",phase:"LANDED"});
+   setSpeed(0);setStatus("LANDED");setPhase("LANDED");setMessage("LAND command completed");await patchMission({status:"LANDED",phase:"LANDED"});landingBusyRef.current=false;
  }
  async function emergencyAutopilot(){
    if(!destinationChosen){setMessage("Choose destination before emergency test");return}
@@ -204,14 +209,20 @@ function App(){
    }catch{setStatus("REPLANNING ERROR");setMessage("Backend replan unavailable")}finally{setTimeout(()=>{replanLock.current=false},700)}
  }
  const commandHandlerRef=useRef(null);
+ const hoverFlight=()=>{manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,until:0};setSpeed(0);setRemoteControl("HOVER");setStatus(flying?"HOVER":"LANDED");setPhase(flying?"HOLD POSITION":"ON GROUND");setMessage(flying?"Drone holding position":"Drone is on the ground")};
+ const commandHandlerRef=useRef(null);
  commandHandlerRef.current=async cmd=>{
-   setPhoneCommand(cmd);setRemoteControl(cmd);
-   if(cmd==="START")return startAutopilot();
-   if(cmd==="STOP"||cmd==="LAND")return stopFlight();
-   if(cmd==="EMERGENCY")return emergencyAutopilot();
-   if(cmd==="GPS_TOGGLE")return toggleGps();
-   if(cmd.startsWith("TARGET:")){try{const t=JSON.parse(cmd.slice(7));await chooseTarget(t);setRemoteControl("TARGET")}catch{setMessage("Invalid remote target")}return}
-   manualMove(cmd);
+   const command=String(cmd||"").trim().toUpperCase();
+   setPhoneCommand(command);setRemoteControl(command);
+   if(command==="START")return startAutopilot();
+   if(command==="LAND"||command==="STOP")return stopFlight();
+   if(command==="HOVER")return hoverFlight();
+   if(command==="EMERGENCY")return emergencyAutopilot();
+   if(command==="AUTOPILOT"){if(!destinationChosen){setMessage("Choose and confirm a target first");return}const r=pathRef.current.length?pathRef.current:await calculate(pos,target);if(!r.length)return;setPath(r);idx.current=0;setMode("AUTOPILOT");setStatus("AUTOPILOT ACTIVE");setPhase("FOLLOWING SAFE 3D ROUTE");setSpeed(10);setMessage("Autopilot command accepted — following route");return}
+   if(command==="GPS_TOGGLE")return toggleGps();
+   if(command.startsWith("TARGET:")){try{const t=JSON.parse(command.slice(7));await chooseTarget(t);setRemoteControl("TARGET")}catch{setMessage("Invalid remote target")}return}
+   if(["UP","DOWN","LEFT","RIGHT","UP_LEFT","UP_RIGHT","DOWN_LEFT","DOWN_RIGHT","ASCEND","DESCEND","YAW_LEFT","YAW_RIGHT"].includes(command))return manualMove(command);
+   setMessage("Unknown controller command: "+command);
  };
  useEffect(()=>{const s=io(SOCKET_URL,{transports:["websocket","polling"],reconnection:true});socketRef.current=s;s.on("connect",()=>{setPhoneConnected(true);s.emit("register-client",{role:"simulator"})});s.on("disconnect",()=>setPhoneConnected(false));s.on("flight-control-command",payload=>{const id=typeof payload==="object"?Number(payload.id||0):0;const command=typeof payload==="string"?payload:payload?.command;if(id&&id<=lastCommandIdRef.current)return;if(id)lastCommandIdRef.current=id;if(command)commandHandlerRef.current?.(command)});return()=>s.disconnect()},[]);
  useEffect(()=>{let cancelled=false;const poll=setInterval(async()=>{if(cancelled)return;try{const r=await fetch(COMMAND_API+"/flight-command?client=simulator",{cache:"no-store"});if(!r.ok)return;const d=await r.json();if(d?.id&&d.id>lastCommandIdRef.current){lastCommandIdRef.current=d.id;commandHandlerRef.current?.(d.command)}}catch{}},100);return()=>{cancelled=true;clearInterval(poll)}},[]);
