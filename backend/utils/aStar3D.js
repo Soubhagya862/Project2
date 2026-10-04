@@ -38,7 +38,7 @@ export function findPath(
 
   if(blocked(s)||blocked(g)) return [];
 
-  const open=[s];
+  const stepSize=Math.max(1,Number(step)||20);\n  const open=[s];
   const openKeys=new Set([key(s)]);
   const came=new Map();
   const gScore=new Map([[key(s),0]]);
@@ -72,7 +72,7 @@ export function findPath(
       ) continue;
 
       const nk=key(n);
-      const stepCost=Math.hypot(dx,dy,dz);
+      const stepCost=stepSize*Math.hypot(dx,dy,dz);
       const tentative=(gScore.get(key(cur))??Infinity)+stepCost;
 
       if(tentative<(gScore.get(nk)??Infinity)){
