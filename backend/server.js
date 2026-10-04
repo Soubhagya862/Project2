@@ -26,22 +26,42 @@ io.on("connection",socket=>{
   socket.emit("server-ready",{service:"NAVIGATE-X",connectedAt:Date.now()});
 
   socket.on("register-client",({role}={})=>{
-    if(role!=="phone"&&role!=="simulator")return;
+    if(!["phone","bridge","controller","simulator"].includes(role))return;
 
     connectedClients.set(socket.id,{role});
     io.emit("client-status",{role,connected:true});
     for(const client of connectedClients.values()){
-      if(client.role==="phone"||client.role==="simulator") socket.emit("client-status",{role:client.role,connected:true});
+      if(["phone","bridge","controller","simulator"].includes(client.role)) socket.emit("client-status",{role:client.role,connected:true});
     }
   });
 
-  socket.on("phone-control",data=>{
-    const sender=connectedClients.get(socket.id);
-    if(sender?.role!=="phone"||typeof data!=="string"||!data.trim())return;
-    latestFlightCommand={id:latestFlightCommand.id+1,command:data.trim(),time:Date.now()};
+  const publishCommand=(command,source)=>{
+    if(typeof command!=="string"||!command.trim())return;
+    latestFlightCommand={id:latestFlightCommand.id+1,command:command.trim(),time:Date.now()};
     for(const [id,client] of connectedClients){
       if(client.role==="simulator")io.to(id).emit("flight-control-command",latestFlightCommand);
+      if(source==="controller"&&client.role==="bridge")io.to(id).emit("controller-command",latestFlightCommand);
     }
+  };
+
+  socket.on("phone-control",data=>{
+    const sender=connectedClients.get(socket.id);
+    if(sender?.role!=="phone"||typeof data!=="string")return;
+    publishCommand(data,"phone");
+  });
+
+  socket.on("controller-control",data=>{
+    const sender=connectedClients.get(socket.id);
+    if(sender?.role!=="controller"||typeof data!=="string")return;
+    // The phone bridge is the transport path; the backend also forwards to
+    // the simulator so localhost control remains functional if bridge drops.
+    publishCommand(data,"controller");
+  });
+
+  socket.on("bridge-control",data=>{
+    const sender=connectedClients.get(socket.id);
+    if(sender?.role!=="bridge"||typeof data!=="string")return;
+    publishCommand(data,"bridge");
   });
 
   socket.on("phone-telemetry",data=>{
@@ -67,9 +87,13 @@ app.use(express.json({limit:"1mb"}));
 
 app.post("/api/flight-command",(req,res)=>{
   const command=typeof req.body?.command==="string"?req.body.command:"";
+  const source=req.body?.source==="controller"?"controller":req.body?.source==="bridge"?"bridge":"phone";
   if(!command)return res.status(400).json({ok:false,error:"command required"});
   latestFlightCommand={id:latestFlightCommand.id+1,command,time:Date.now()};
-  io.emit("flight-control-command",latestFlightCommand);
+  for(const [id,client] of connectedClients){
+    if(client.role==="simulator")io.to(id).emit("flight-control-command",latestFlightCommand);
+    if(source==="controller"&&client.role==="bridge")io.to(id).emit("controller-command",latestFlightCommand);
+  }
   res.json({ok:true,...latestFlightCommand});
 });
 
