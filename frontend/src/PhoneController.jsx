@@ -35,11 +35,11 @@ export default function PhoneController(){
   const safe={x:Number(target.x)||0,y:Math.max(5,Number(target.y)||30),z:Number(target.z)||0};
   setTarget(safe);setConfirmed(true);setLast("TARGET");
   socketRef.current?.emit("target-sync",safe);
-  socketRef.current?.emit("drone-command","TARGET:"+JSON.stringify(safe));
+  socketRef.current?.emit("phone-control","TARGET:"+JSON.stringify(safe));
  }
 
  return <div className="phone-controller">
-  <div className="remote-header"><div><h1>NAVIGATE-X</h1><p>REAL-TIME FLIGHT REMOTE</p></div><span className={connected?"ok":"danger"}>● {connected?"LINKED":"OFFLINE"}</span></div>
+  <div className="remote-header"><div><h1>NAVIGATE-X</h1><p>PHONE → MAIN FLIGHT CONTROLLER</p></div><span className={connected?"ok":"danger"}>● {connected?"LINKED":"OFFLINE"}</span></div>
 
   <div className="remote-card live-card">
    <div className="remote-status"><b>{telemetry.status}</b><span className={telemetry.gps==="CONNECTED"?"ok":"danger"}>GPS {telemetry.gps}</span></div>
