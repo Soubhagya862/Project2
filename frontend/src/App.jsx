@@ -33,6 +33,10 @@ const sensorDistanceToObstacle = (position, heading, obstacle, maxRange = 300) =
     : Infinity;
 };
 
+function getLiveObstacles(dynamicObstacle) {
+  return dynamicObstacle ? [...OBSTACLES, dynamicObstacle] : OBSTACLES;
+}
+
 function scanEnvironment(position, heading, maxRange = 300) {
   const detected = OBSTACLES
     .map(o => ({ ...o, distance:sensorDistanceToObstacle(position, heading, o, maxRange) }))
@@ -286,7 +290,7 @@ function SensorRays({ position, heading, range }) {
   );
 }
 
-function Scene({ position, heading, target, route, detectedObstacle, sensorRange, missionState, speed, discoveredObstacles }) {
+function Scene({ position, heading, target, route, detectedObstacle, sensorRange, missionState, speed, discoveredObstacles, dynamicObstacle }) {
   const camera = useRef();
   const flight = ["AUTONOMOUS", "RETURNING", "EMERGENCY AUTOPILOT"].includes(missionState);
   const flightView = flight && speed > 1;
@@ -353,7 +357,7 @@ function Scene({ position, heading, target, route, detectedObstacle, sensorRange
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow><planeGeometry args={[4500, 4500]} /><meshStandardMaterial color="#17291f" roughness={1} /></mesh>
       <Marker point={HOME} type="home" />
       <Marker point={target} type="target" />
-      {OBSTACLES.map((o) => <Obstacle key={o.id} obstacle={o} detected={detectedObstacle === o.id || discoveredObstacles.includes(o.id)} />)}
+      {[...OBSTACLES, ...(dynamicObstacle ? [dynamicObstacle] : [])].map((o) => <Obstacle key={o.id} obstacle={o} detected={detectedObstacle === o.id || discoveredObstacles.includes(o.id)} />)}
       <RouteLine route={route} />
       <SensorRays position={position} heading={heading} range={sensorRange} />
       <Drone position={position} heading={heading} active={missionState === "AUTONOMOUS" || missionState === "RETURNING" || missionState === "EMERGENCY AUTOPILOT"} />
@@ -381,7 +385,7 @@ function Metric({ label, value, className = "" }) {
   return <div className={"metric " + className}><span>{label}</span><b>{value}</b></div>;
 }
 
-function Engine({ position, heading, missionState, route, target, setPosition, setHeading, setSpeed, setBattery, setMissionState, setDetectedObstacle, setSensorRange, setRoute, setReplans, pathMode, setDiscoveredObstacles, setScanCount }) {
+function Engine({ position, heading, missionState, route, target, setPosition, setHeading, setSpeed, setBattery, setMissionState, setDetectedObstacle, setSensorRange, setRoute, setReplans, pathMode, setDiscoveredObstacles, setScanCount, dynamicObstacle }) {
   const state = useRef({ ...position });
   const velocity = useRef({ x: 0, y: 0, z: 0 });
   const lastReplanAt = useRef(0);
@@ -419,7 +423,11 @@ function Engine({ position, heading, missionState, route, target, setPosition, s
     setBattery((b) => Math.max(0, b - dt * 0.025));
     // Simulated onboard vision/LiDAR scan. The drone only "discovers"
     // obstacles inside its sensor cone and remembers their IDs.
-    const scan = scanEnvironment(state.current, heading, 300);
+    const liveObstacles = getLiveObstacles(dynamicObstacle);
+    const scan = liveObstacles
+      .map(o => ({ ...o, distance:sensorDistanceToObstacle(state.current, heading, o, 300) }))
+      .filter(o => Number.isFinite(o.distance))
+      .sort((a,b)=>a.distance-b.distance);
     setScanCount((n) => n + (scan.length ? 1 : 0));
     if (scan.length) {
       setDiscoveredObstacles((old) => [...new Set([...old, ...scan.map(o => o.id)])]);
@@ -433,8 +441,8 @@ function Engine({ position, heading, missionState, route, target, setPosition, s
     // makes the next route segment unsafe.
     if (pathMode === "DRONE" && missionState !== "RETURNING" && nearestObstacle && nearestObstacle.distance < 180 && performance.now() - lastReplanAt.current > 1500) {
       const nextWaypoint = route[nextIndex];
-      if (nextWaypoint && segmentBlocked(state.current, nextWaypoint, OBSTACLES)) {
-        const replanned = createRoute({ ...state.current }, { ...target }, OBSTACLES);
+      if (nextWaypoint && segmentBlocked(state.current, nextWaypoint, liveObstacles)) {
+        const replanned = createRoute({ ...state.current }, { ...target }, liveObstacles);
         if (replanned.length > 1) {
           lastReplanAt.current = performance.now();
           setRoute(replanned);
@@ -469,6 +477,8 @@ export default function App() {
   const [pathAnalyzing, setPathAnalyzing] = useState(false);
   const [discoveredObstacles, setDiscoveredObstacles] = useState([]);
   const [scanCount, setScanCount] = useState(0);
+  const [dynamicObstacle, setDynamicObstacle] = useState(null);
+  const dynamicObstacleRef = useRef(null);
   const socketRef = useRef(null);
   const estimatorRef = useRef({ ...HOME, bias:{x:0,y:0,z:0} });
 
@@ -659,8 +669,8 @@ export default function App() {
           <div className="canvas-wrap">
             <Canvas shadows dpr={[1,1.5]}>
               <color attach="background" args={["#07131c"]}/><fog attach="fog" args={["#07131c",700,3000]}/>
-              <Scene position={position} heading={heading} target={target} route={route} detectedObstacle={detectedObstacle} sensorRange={sensorRange} missionState={missionState} speed={speed} discoveredObstacles={discoveredObstacles}/>
-              <Engine position={position} heading={heading} missionState={missionState} route={route} target={target} setPosition={setPosition} setHeading={setHeading} setSpeed={setSpeed} setBattery={setBattery} setMissionState={setMissionState} setDetectedObstacle={setDetectedObstacle} setSensorRange={setSensorRange} setRoute={setRoute} setReplans={setReplans} pathMode={pathMode} setDiscoveredObstacles={setDiscoveredObstacles} setScanCount={setScanCount}/>
+              <Scene position={position} heading={heading} target={target} route={route} detectedObstacle={detectedObstacle} sensorRange={sensorRange} missionState={missionState} speed={speed} discoveredObstacles={discoveredObstacles} dynamicObstacle={dynamicObstacle}/>
+              <Engine position={position} heading={heading} missionState={missionState} route={route} target={target} setPosition={setPosition} setHeading={setHeading} setSpeed={setSpeed} setBattery={setBattery} setMissionState={setMissionState} setDetectedObstacle={setDetectedObstacle} setSensorRange={setSensorRange} setRoute={setRoute} setReplans={setReplans} pathMode={pathMode} setDiscoveredObstacles={setDiscoveredObstacles} setScanCount={setScanCount} dynamicObstacle={dynamicObstacle}/>
             </Canvas>
             <div className={speed > 1 ? "view-mode fpv-active" : "view-mode"}>{speed > 1 ? "● DRONE FLIGHT VIEW • FULL DRONE" : "● OPERATOR VIEW • STATIONARY"}</div>
             <div className="monitor-hud"><span>ALT <b>{estimatedPosition.y.toFixed(1)}m</b></span><span>HDG <b>{heading.toFixed(0)}°</b></span><span>GPS <b>{gpsDenied?"DENIED":"CONNECTED"}</b></span></div>
