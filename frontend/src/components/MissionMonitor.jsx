@@ -1,0 +1,1 @@
+export default function MissionMonitor({status,phase,gps,waypoints,missionId}){return <div className="panel"><h3>MISSION MONITOR</h3><p><b>Status:</b> {status}</p><p><b>Phase:</b> {phase}</p><p><b>GPS:</b> <span className={gps?"ok":"danger"}>{gps?"CONNECTED":"DENIED"}</span></p><p><b>Route:</b> {waypoints} waypoints</p><p><b>Mission:</b> {missionId||"Not created"}</p></div>}
