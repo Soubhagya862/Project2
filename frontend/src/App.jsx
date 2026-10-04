@@ -6,7 +6,7 @@ import {io} from "socket.io-client";
 import MissionMonitor from "./components/MissionMonitor";
 import DroneSensors from "./components/DroneSensors";
 
-const API=import.meta.env.VITE_API_URL||"http://localhost:5000/api";
+const API=(()=>{const v=import.meta.env.VITE_API_URL?.trim();if(v&&!v.includes("localhost")&&!v.includes("127.0.0.1"))return v.endsWith("/")?v.slice(0,-1):v;return window.location.protocol+"//"+window.location.hostname+":5000/api";})();
 function getLanBackendUrl(){
   const configured=import.meta.env.VITE_SOCKET_URL?.trim();
   if(configured)return configured.endsWith("/")?configured.slice(0,-1):configured;
@@ -148,14 +148,14 @@ function App(){
  async function chooseTarget(t=target){
    const safe={x:THREE.MathUtils.clamp(Number(t.x)||0,WORLD.minX,WORLD.maxX),y:THREE.MathUtils.clamp(Number(t.y)||12,WORLD.minY,WORLD.maxY),z:THREE.MathUtils.clamp(Number(t.z)||0,WORLD.minZ,WORLD.maxZ)};
    setTarget(safe);setDestinationChosen(true);setMode("MANUAL");setStatus("DESTINATION SELECTED");setPhase("READY FOR ROUTE");
-   const r=await calculate(pos,safe);if(r.length)setMessage("Destination locked — calculate route or create mission");
+   const r=await calculate(pos,safe);if(r.length){setMessage("Destination locked — safe route calculated");await createMission(safe,r);}
  }
- async function createMission(){
-   if(!destinationChosen){setMessage("Choose a destination first");return}
-   const r=path.length?path:await calculate();if(!r.length)return;
-   try{const res=await fetch(API+"/missions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({start:HOME,target,route:r,gpsStatus:gps?"CONNECTED":"DENIED",status:"READY",phase:"PLANNED"})});if(!res.ok)throw Error();
-    const m=await res.json();setMission(m);missionRef.current=m;setStatus("MISSION CREATED");setPhase("PLANNED");setMessage("Mission saved and ready");
-   }catch{setMessage("Mission save failed — check backend and MongoDB")}
+ async function createMission(targetPoint=target,routeInput=path){
+   if(!destinationChosen){setMessage("Choose a destination first");return null}
+   const r=routeInput?.length?routeInput:await calculate(pos,targetPoint);if(!r.length)return null;
+   try{const res=await fetch(API+"/missions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({start:HOME,target:targetPoint,route:r,gpsStatus:gps?"CONNECTED":"DENIED",status:"READY",phase:"PLANNED"})});if(!res.ok)throw Error();
+    const m=await res.json();setMission(m);missionRef.current=m;setStatus("MISSION CREATED");setPhase("PLANNED");setMessage("Mission saved and ready");return m;
+   }catch{setMessage("Mission save unavailable — simulation will continue locally");return null}
  }
  function manualMove(cmd){
    if(pos.y<=2.5&&cmd!=="ASCEND"){setMessage("Drone is on the ground — press TAKE OFF first");return}
@@ -227,7 +227,7 @@ function App(){
  useEffect(()=>{let cancelled=false;const poll=setInterval(async()=>{if(cancelled)return;try{const r=await fetch(COMMAND_API+"/flight-command?client=simulator",{cache:"no-store"});if(!r.ok)return;const d=await r.json();if(d?.id&&d.id>lastCommandIdRef.current){lastCommandIdRef.current=d.id;commandHandlerRef.current?.(d.command)}}catch{}},100);return()=>{cancelled=true;clearInterval(poll)}},[]);
  useEffect(()=>{let raf=0,lastTime=performance.now();const tick=now=>{const dt=Math.min((now-lastTime)/1000,.033);lastTime=now;const m=manualMotionRef.current;if(mode==="MANUAL"&&now<m.until){setPos(p=>({x:THREE.MathUtils.clamp(p.x+m.vx*dt,WORLD.minX,WORLD.maxX),y:THREE.MathUtils.clamp(p.y+m.vy*dt,2,WORLD.maxY),z:THREE.MathUtils.clamp(p.z+m.vz*dt,WORLD.minZ,WORLD.maxZ)}));if(m.yaw)setHeading(h=>h+m.yaw*dt)}else if(mode==="MANUAL"&&m.until!==0){manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,until:0};setSpeed(0);setPhase("REMOTE CONTROL IDLE")}raf=requestAnimationFrame(tick)};raf=requestAnimationFrame(tick);return()=>cancelAnimationFrame(raf)},[mode]);
  useEffect(()=>{if(!["AUTOPILOT","EMERGENCY AUTOPILOT"].includes(mode)||!path.length)return;let alive=true;const timer=setInterval(async()=>{if(!alive)return;const n=path[idx.current];if(!n){clearInterval(timer);setSpeed(0);setLanding(true);setStatus(returning.current?"HOME ARRIVAL":"TARGET REACHED");setPhase("LANDING");setMessage(returning.current?"Returning home — landing":"Target reached — precision landing");return}if(isBlocked(n)){await replan();return}const d=distance(pos,n),step=Math.min(3.5,d);if(d<.05){idx.current++;return}const ratio=step/d,next={x:pos.x+(n.x-pos.x)*ratio,y:pos.y+(n.y-pos.y)*ratio,z:pos.z+(n.z-pos.z)*ratio};setHeading(Math.atan2(n.z-pos.z,n.x-pos.x)*180/Math.PI);setPos(next);setSpeed(10);idx.current=distance(next,n)<.15?idx.current+1:idx.current},70);return()=>{alive=false;clearInterval(timer)}},[mode,path,pos,obstacles]);
- useEffect(()=>{if(!landing)return;const timer=setTimeout(async()=>{setPos(p=>({...p,y:returning.current?HOME.y:target.y}));setSpeed(0);setStatus(returning.current?"MISSION COMPLETE":"LANDED");setPhase(returning.current?"HOME LANDED":"WAITING 10s");await patchMission({status:returning.current?"MISSION COMPLETE":"LANDED",phase:returning.current?"HOME LANDED":"WAITING 10s"});if(!returning.current){await new Promise(r=>setTimeout(r,10000));returning.current=true;const r=await calculate({...pos,y:target.y},HOME);if(!r.length){setStatus("RETURN ROUTE BLOCKED");setPhase("RETURN FAILED");return}setPath(r);idx.current=0;setLanding(false);setMode(gps?"AUTOPILOT":"EMERGENCY AUTOPILOT");setStatus("RETURNING HOME");setPhase("AUTONOMOUS RETURN TO HOME");setSpeed(10);setMessage("10-second landing wait complete — returning home");await patchMission({status:"RETURNING HOME",phase:"AUTONOMOUS RETURN TO HOME",route:r})}},1200);return()=>clearTimeout(timer)},[landing]);
+ useEffect(()=>{if(!landing)return;const timer=setTimeout(async()=>{const landingY=returning.current?HOME.y:2;const startY=pos.y;const steps=Math.max(1,Math.ceil(Math.max(0,startY-landingY)/3));setStatus("LANDING");setPhase(returning.current?"HOME LANDING":"PRECISION LANDING");for(let i=1;i<=steps;i++){await new Promise(r=>setTimeout(r,70));setPos(p=>({...p,y:Math.max(landingY,startY-(startY-landingY)*(i/steps))}))}setPos(p=>({...p,y:landingY}));setSpeed(0);setStatus(returning.current?"MISSION COMPLETE":"LANDED");setPhase(returning.current?"HOME LANDED":"WAITING 10s");await patchMission({status:returning.current?"MISSION COMPLETE":"LANDED",phase:returning.current?"HOME LANDED":"WAITING 10s"});if(!returning.current){await new Promise(r=>setTimeout(r,10000));returning.current=true;setPos(p=>({...p,y:30}));setStatus("RETURN TAKEOFF");setPhase("AUTONOMOUS TAKEOFF");await new Promise(r=>setTimeout(r,600));const r=await calculate({...pos,y:30},HOME);if(!r.length){setStatus("RETURN ROUTE BLOCKED");setPhase("RETURN FAILED");return}setPath(r);idx.current=0;setLanding(false);setMode(gps?"AUTOPILOT":"EMERGENCY AUTOPILOT");setStatus("RETURNING HOME");setPhase("AUTONOMOUS RETURN TO HOME");setSpeed(10);setMessage("10-second landing wait complete — taking off and returning home");await patchMission({status:"RETURNING HOME",phase:"AUTONOMOUS RETURN TO HOME",route:r})}},1200);return()=>clearTimeout(timer)},[landing]);
  useEffect(()=>{const timer=setInterval(()=>{socketRef.current?.emit("phone-telemetry",{x:pos.x,y:pos.y,z:pos.z,speed,heading,gps:gps?"CONNECTED":"DENIED",status,phase,mode,target,home:HOME,distanceToTarget:distance(pos,target),sensorDistance});if(mission?._id){fetch(API+`/telemetry`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({missionId:mission._id,position:pos,altitude:pos.y,speed,heading,gpsStatus:gps?"CONNECTED":"DENIED",obstacleDetected:sensor,sensorDistance,status,phase,mode})}).catch(()=>{})}},400);return()=>clearInterval(timer)},[mission,pos,speed,heading,gps,sensor,sensorDistance,status,phase,mode,target]);
  const dist=distance(pos,target),eta=Math.ceil(dist/50);
  return <div className="app">
