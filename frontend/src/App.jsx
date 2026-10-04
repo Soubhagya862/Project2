@@ -3,10 +3,10 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Grid, OrbitControls, PerspectiveCamera } from "@react-three/drei";
 import * as THREE from "three";
 
-const HOME = { x: 0, y: 4, z: 0 };
-const TARGET = { x: 420, y: 80, z: -260 };
+const WORLD_SIZE = 3000;\nconst HOME = { x: 0, y: 4, z: 0 };
+const TARGET = { x: 1400, y: 100, z: -1100 };
 
-const OBSTACLES = [
+const START_PAD = { x: 0, y: 2, z: 0 };\n\nconst OBSTACLES = [
   { x: 130, y: 35, z: -40, sx: 70, sy: 70, sz: 70 },
   { x: 245, y: 55, z: -140, sx: 90, sy: 110, sz: 55 },
   { x: 320, y: 45, z: 70, sx: 100, sy: 90, sz: 80 },
@@ -99,9 +99,9 @@ function Scene({ position, heading, flying }) {
       <PerspectiveCamera makeDefault position={[180, 150, 280]} fov={55} />
       <ambientLight intensity={1.5} />
       <directionalLight position={[100, 250, 100]} intensity={2.5} castShadow />
-      <Grid args={[1600, 1600]} position={[0, 0, 0]} cellSize={10} sectionSize={50} fadeDistance={900} />
+      <Grid args={[WORLD_SIZE, WORLD_SIZE]} position={[0, 0, 0]} cellSize={25} sectionSize={150} fadeDistance={2200} />
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[1600, 1600]} />
+        <planeGeometry args={[WORLD_SIZE, WORLD_SIZE]} />
         <meshStandardMaterial color="#20362a" roughness={1} />
       </mesh>
       {OBSTACLES.map((o, i) => <Obstacle key={i} o={o} />)}
