@@ -249,7 +249,9 @@ export default function App() {
   const [phase, setPhase] = useState("ON GROUND");
   const [battery, setBattery] = useState(100);
   const [speed, setSpeed] = useState(0);
-  const [heading, setHeading] = useState(0);\n  const [bank, setBank] = useState(0);\n  const [pitch, setPitch] = useState(0);
+  const [heading, setHeading] = useState(0);
+  const [bank, setBank] = useState(0);
+  const [pitch, setPitch] = useState(0);
   const [gps, setGps] = useState(true);
   const [missionProgress, setMissionProgress] = useState(0);
   const [message, setMessage] = useState("Drone is ready on the launch stand.");
