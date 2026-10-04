@@ -236,7 +236,7 @@ function App(){
    <Canvas shadows camera={{position:[0,28,45],fov:62}} gl={{antialias:true}} style={{touchAction:"none"}}>
     <color attach="background" args={["#87a9c1"]}/><fog attach="fog" args={["#87a9c1",100,210]}/><ambientLight intensity={1.5}/><directionalLight castShadow position={[30,80,20]} intensity={3}/><hemisphereLight intensity={1.2} groundColor="#263b2a" skyColor="#b8d7ed"/>
     <Terrain/>{obstacles.map(o=><ObstacleView key={o.id||JSON.stringify(o.position)} o={o}/>)}<DroneModel position={pos} heading={heading} flying={flying}/>
-    <DroneSensors position={pos} obstacles={obstacles} range={18} onDetection={({detected,distance:front})=>{setSensor(detected);setSensorDistance(front);if(detected&&front<4&&["AUTOPILOT","EMERGENCY AUTOPILOT"].includes(mode))replan()}}/>
+    <DroneSensors position={pos} heading={heading} obstacles={obstacles} range={18} onDetection={({detected,distance:front})=>{setSensor(detected);setSensorDistance(front);if(detected&&front<4&&["AUTOPILOT","EMERGENCY AUTOPILOT"].includes(mode))replan()}}/>
     <Route path={path} returning={returning.current}/><TargetMarker target={target}/><TargetMarker target={HOME} home/><DroneCamera position={pos} heading={heading}/>
    </Canvas>
    <div className="flight-hud"><div className="hud-title">DRONE LIVE VIEW <span className="pulse">● LIVE</span></div><div className="hud-row"><b>{status}</b><span>MODE {mode}</span><span>ALT {pos.y.toFixed(1)}m</span><span>SPD {speed.toFixed(1)}m/s</span><span>HDG {heading.toFixed(0)}°</span></div><div className="hud-row muted">DRONE {pos.x.toFixed(1)} / {pos.y.toFixed(1)} / {pos.z.toFixed(1)} · TARGET {target.x} / {target.y} / {target.z} · ETA {eta}s</div></div>
