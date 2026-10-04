@@ -19,30 +19,44 @@ const io=new SocketIOServer(httpServer,{
 
 const connectedClients=new Map();
 
-const connectedClients=new Map();
-
 io.on("connection",socket=>{
   connectedClients.set(socket.id,{role:"unknown"});
-  connectedClients.set(socket.id,{role:"unknown"});
+
   socket.emit("server-ready",{service:"NAVIGATE-X",connectedAt:Date.now()});
+
   socket.on("register-client",({role}={})=>{
     if(role!=="phone"&&role!=="simulator")return;
+
     connectedClients.set(socket.id,{role});
     io.emit("client-status",{role,connected:true});
   });
+
   socket.on("phone-control",data=>{
     const sender=connectedClients.get(socket.id);
+
     if(sender?.role!=="phone"||typeof data!=="string")return;
+
     for(const [id,client] of connectedClients){
-      if(client.role==="simulator")io.to(id).emit("flight-control-command",data);
+      if(client.role==="simulator"){
+        io.to(id).emit("flight-control-command",data);
+      }
     }
   });
+
   socket.on("phone-telemetry",data=>{
     socket.broadcast.emit("phone-telemetry",data);
   });
+
   socket.on("disconnect",()=>{
     const client=connectedClients.get(socket.id);
-    if(client?.role&&client.role!=="unknown")io.emit("client-status",{role:client.role,connected:false});
+
+    if(client?.role&&client.role!=="unknown"){
+      io.emit("client-status",{
+        role:client.role,
+        connected:false
+      });
+    }
+
     connectedClients.delete(socket.id);
   });
 });
@@ -63,6 +77,7 @@ app.use("/api/telemetry",telemetryRoutes);
 app.use("/api/obstacles",obstacleRoutes);
 
 app.use((req,res)=>res.status(404).json({error:"API route not found"}));
+
 app.use((err,req,res,next)=>{
   console.error(err);
   res.status(500).json({error:"Internal server error"});
@@ -78,4 +93,8 @@ if(process.env.MONGODB_URI){
   console.log("MONGODB_URI not set — simulation can run without database persistence.");
 }
 
-httpServer.listen(port,"0.0.0.0",()=>console.log(`NAVIGATE-X backend running on port ${port} (LAN enabled)`));
+httpServer.listen(
+  port,
+  "0.0.0.0",
+  ()=>console.log(`NAVIGATE-X backend running on port ${port} (LAN enabled)`)
+);
