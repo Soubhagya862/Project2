@@ -42,7 +42,7 @@ function DroneModel({p,heading}){
     <mesh position={[0,-.55,0]}><cylinderGeometry args={[.32,.5,.35,20]}/><meshStandardMaterial metalness={.8} roughness={.2}/></mesh>
     <pointLight position={[0,-.8,-1.2]} intensity={3} distance={12}/>
     {arms.map(([x,y,z],i)=><group key={i} position={[x,y,z]}>
-      <mesh rotation={[0,0,Math.atan2(z,x)}]}><boxGeometry args={[3.6,.18,.22]}/><meshStandardMaterial metalness={.8} roughness={.2}/></mesh>
+      <mesh rotation={[0,0,Math.atan2(z,x)]}><boxGeometry args={[3.6,.18,.22]}/><meshStandardMaterial metalness={.8} roughness={.2}/></mesh>
       <group ref={el=>rotors.current[i]=el} position={[0,.35,0]}>
         <mesh><cylinderGeometry args={[.22,.22,.18,20]}/><meshStandardMaterial metalness={.9}/></mesh>
         <mesh rotation={[Math.PI/2,0,0]}><boxGeometry args={[2.4,.08,.16]}/><meshStandardMaterial/></mesh>
