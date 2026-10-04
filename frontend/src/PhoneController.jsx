@@ -29,6 +29,12 @@ export default function PhoneController(){
   setLast(command);
   const speech={START:"Drone is ready to take up",LAND:"Drone landing",HOVER:"Drone holding position"}[command];
   if(speech)try{window.speechSynthesis?.cancel();window.speechSynthesis?.speak(new SpeechSynthesisUtterance(speech))}catch{}
+  // Use the live Socket.IO control channel when the phone is linked.
+  // HTTP remains as a fallback if the socket is not connected yet.
+  if(socketRef.current?.connected){
+   socketRef.current.emit("phone-control",command);
+   return;
+  }
   fetch(COMMAND_API+"/flight-command",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({command}),cache:"no-store"})
    .then(r=>{if(!r.ok)throw Error()}).catch(()=>setLast("COMMAND SERVER OFFLINE"));
  }
