@@ -9,12 +9,12 @@ import DroneSensors from "./components/DroneSensors";
 const API=import.meta.env.VITE_API_URL||"http://localhost:5000/api";
 function getLanBackendUrl(){
   const configured=import.meta.env.VITE_SOCKET_URL?.trim();
-  if(configured)return configured.replace(/\/$/,"");
+  if(configured)return configured.endsWith("/")?configured.slice(0,-1):configured;
   const host=window.location.hostname;
   return `http://${host}:5000`;
 }
 const SOCKET_URL=getLanBackendUrl();
-const COMMAND_API=(()=>{const v=import.meta.env.VITE_API_URL?.trim();if(v&&!/localhost|127\.0\.0\.1/i.test(v))return v.replace(/\/$/,"");return `${window.location.protocol}//${window.location.hostname}:5000/api`;})();
+const COMMAND_API=(()=>{const v=import.meta.env.VITE_API_URL?.trim();if(v&&!v.includes("localhost")&&!v.includes("127.0.0.1"))return v.endsWith("/")?v.slice(0,-1):v;return `${window.location.protocol}//${window.location.hostname}:5000/api`;})();
 
 const HOME={x:0,y:2,z:0};
 const WORLD={minX:-1500,maxX:1500,minY:5,maxY:300,minZ:-1500,maxZ:1500};
