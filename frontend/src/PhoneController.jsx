@@ -8,7 +8,7 @@ export default function PhoneController(){
  const socketRef=useRef(null);
  const [connected,setConnected]=useState(false);
  const [last,setLast]=useState("STOP");
- const [target,setTarget]=useState({x:65,y:16,z:0});
+ const [target,setTarget]=useState({x:700,y:60,z:450});
  const [telemetry,setTelemetry]=useState({x:0,y:12,z:0,speed:0,heading:0,gps:"CONNECTED",status:"READY",phase:"IDLE",mode:"MANUAL",target:{x:65,y:16,z:0},distanceToTarget:0,sensorDistance:18});
 
  useEffect(()=>{
@@ -38,12 +38,7 @@ export default function PhoneController(){
    <div className="remote-telemetry extra"><div>DIST<b>{Number(telemetry.distanceToTarget||0).toFixed(1)}m</b></div><div>SENSOR<b>{Number(telemetry.sensorDistance||0).toFixed(1)}m</b></div><div>PHASE<b>{telemetry.phase||"IDLE"}</b></div></div>
   </div>
 
-  <div className="remote-card target-select">
-   <h3>DESTINATION / LIVE TRACKING</h3>
-   <div className="phone-coords"><label>X<input type="number" value={target.x} onChange={e=>setTarget(t=>({...t,x:+e.target.value}))}/></label><label>ALT<input type="number" value={target.y} onChange={e=>setTarget(t=>({...t,y:+e.target.value}))}/></label><label>Z<input type="number" value={target.z} onChange={e=>setTarget(t=>({...t,z:+e.target.value}))}/></label></div>
-   <button className="takeoff" onClick={selectTarget}>✓ CHOOSE DESTINATION</button>
-   <small>Live target: {target.x}, {target.y}, {target.z}</small>
-  </div>
+  <div className="remote-card target-select"><h3>3 KM LIVE MAP · CHOOSE DESTINATION</h3><div className="phone-map" onClick={e=>{const r=e.currentTarget.getBoundingClientRect();const x=Math.round(((e.clientX-r.left)/r.width-.5)*3000);const z=Math.round(((e.clientY-r.top)/r.height-.5)*3000);setTarget({x,y:60,z})}}><div className="phone-map-home">H</div><div className="phone-map-target" style={{left:`${50+target.x/30}%`,top:`${50+target.z/30}%`}}>◆</div><div className="phone-map-drone" style={{left:`${50+Number(telemetry.x||0)/30}%`,top:`${50+Number(telemetry.z||0)/30}%`}}>D</div></div><div className="map-readout">Target: {Math.round(target.x)} m / {Math.round(target.z)} m</div><button className="takeoff" onClick={selectTarget}>✓ CONFIRM DESTINATION</button><small>Tap anywhere on the 3 km map. The route is created automatically after confirmation.</small></div>
 
   <div className="remote-card">
    <h3>MANUAL MODE</h3>
