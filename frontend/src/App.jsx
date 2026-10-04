@@ -343,7 +343,7 @@ export default function App() {
   useEffect(() => {
     const down = (e) => {
       const k = e.key.toLowerCase();
-      if (["w", "a", "s", "d"].includes(k)) {
+      if (["w", "a", "s", "d", "q", "e", "r", "f", "arrowup", "arrowdown"].includes(k)) {
         e.preventDefault();
         keys.current.add(k);
       }
@@ -396,17 +396,51 @@ export default function App() {
         const k = keys.current;
         const x = (k.has("d") ? 1 : 0) - (k.has("a") ? 1 : 0);
         const z = (k.has("s") ? 1 : 0) - (k.has("w") ? 1 : 0);
+        const vertical = (k.has("arrowup") ? 1 : 0) - (k.has("arrowdown") ? 1 : 0);
+        const rotating = (k.has("q") ? -1 : 0) + (k.has("e") ? 1 : 0);
+        const tilting = (k.has("r") ? -1 : 0) + (k.has("f") ? 1 : 0);
+
+        if (rotating) {
+          setMode("MANUAL");
+          setStatus("MANUAL FLIGHT");
+          setPhase(rotating < 0 ? "ROTATING LEFT" : "ROTATING RIGHT");
+          setHeading((h) => h + rotating * 1.8 * dt);
+        }
+
+        if (tilting) {
+          setMode("MANUAL");
+          setStatus("MANUAL FLIGHT");
+          setPhase(tilting < 0 ? "TILT UP" : "TILT DOWN");
+          setPitch((p) => THREE.MathUtils.clamp(p + tilting * 0.9 * dt, -0.55, 0.55));
+        } else if (!rotating && !x && !z && !vertical) {
+          setPitch((p) => THREE.MathUtils.lerp(p, 0, Math.min(1, dt * 4)));
+        }
+
+        if (vertical) {
+          setMode("MANUAL");
+          setStatus("MANUAL FLIGHT");
+          setPhase(vertical > 0 ? "ASCENDING" : "DESCENDING");
+          setPosition((p) => ({
+            ...p,
+            y: THREE.MathUtils.clamp(p.y + vertical * 28 * dt, HOME.y, 500)
+          }));
+          setSpeed(28);
+        }
 
         if (x || z) {
           setMode("MANUAL");
           setStatus("MANUAL FLIGHT");
           setPhase("W A S D CONTROL");
           setSpeed(28);
+          const length = Math.hypot(x, z) || 1;
           setPosition((p) => ({
             ...p,
-            x: p.x + x * 28 * dt,
-            z: p.z + z * 28 * dt
+            x: p.x + (x / length) * 28 * dt,
+            z: p.z + (z / length) * 28 * dt
           }));
+          setBank((b) => THREE.MathUtils.lerp(b, -x * 0.22, Math.min(1, dt * 7)));
+        } else {
+          setBank((b) => THREE.MathUtils.lerp(b, 0, Math.min(1, dt * 7)));
         }
       }
 
@@ -454,14 +488,24 @@ export default function App() {
               <ControlButton onDown={() => setMode("MANUAL")}>S</ControlButton>
               <ControlButton onDown={() => setMode("MANUAL")}>D</ControlButton>
             </div>
-            <p className="help">W/S = FORWARD/BACK · A/D = STRAFE · Q/E = 360 ROTATE · R/F = TILT</p>
+            <p className="help">W/S = FORWARD/BACK · A/D = STRAFE · Q/E = ROTATE · R/F = TILT · ↑/↓ = ALTITUDE</p>
           </div>
 
           <div className="control-section">
             <div className="section-label">ALTITUDE</div>
             <div className="two-buttons">
-              <ControlButton onDown={() => setMode("MANUAL")}>ALT ↑</ControlButton>
-              <ControlButton onDown={() => setMode("MANUAL")}>ALT ↓</ControlButton>
+              <ControlButton onDown={() => {
+                setMode("MANUAL");
+                setStatus("MANUAL FLIGHT");
+                setPhase("ASCENDING");
+                setPosition((p) => ({ ...p, y: THREE.MathUtils.clamp(p.y + 10, HOME.y, 500) }));
+              }}>ALT ↑</ControlButton>
+              <ControlButton onDown={() => {
+                setMode("MANUAL");
+                setStatus("MANUAL FLIGHT");
+                setPhase("DESCENDING");
+                setPosition((p) => ({ ...p, y: THREE.MathUtils.clamp(p.y - 10, HOME.y, 500) }));
+              }}>ALT ↓</ControlButton>
             </div>
           </div>
 
