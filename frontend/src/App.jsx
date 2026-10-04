@@ -415,6 +415,68 @@ function App(){
     <div className="mini-monitor"><div className="mini-title">LIVE TRACKING RADAR</div><div className="radar"><div className="radar-line"></div><div className="radar-drone" style={{left:`${50+pos.x*.35}%`,top:`${50+pos.z*.35}%`}}>◆</div><div className="radar-target" style={{left:`${50+target.x*.35}%`,top:`${50+target.z*.35}%`}}>✦</div><div className="radar-home" style={{left:"50%",top:"50%"}}>H</div></div><small>D DRONE · T TARGET · H HOME</small></div>
    </section>
 
+   <aside className="control-panel">
+    <div className="panel-heading"><span>FLIGHT CONTROLLER</span><small>REMOTE / MANUAL / AUTO</small></div>
+
+    <div className="mode-tabs">
+     <button className={mode==="MANUAL"?"active":""} onClick={()=>{setMode("MANUAL");setStatus("MANUAL READY");setPhase("REMOTE CONTROL IDLE")}}>MANUAL</button>
+     <button className={mode==="AUTOPILOT"?"active":""} onClick={()=>commandHandlerRef.current?.("AUTOPILOT")}>AUTO</button>
+     <button className={mode==="EMERGENCY AUTOPILOT"?"danger-tab":""} onClick={()=>commandHandlerRef.current?.("EMERGENCY")}>EMERGENCY</button>
+    </div>
+
+    <div className="target-box">
+     <div className="section-label">TARGET / MISSION</div>
+     <div className="coord-grid">
+      <label>X<input type="number" value={Math.round(target.x)} onChange={e=>setTarget(t=>({...t,x:Number(e.target.value)}))}/></label>
+      <label>ALT<input type="number" min="5" value={Math.round(target.y)} onChange={e=>setTarget(t=>({...t,y:Number(e.target.value)}))}/></label>
+      <label>Z<input type="number" value={Math.round(target.z)} onChange={e=>setTarget(t=>({...t,z:Number(e.target.value)}))}/></label>
+     </div>
+     <button className="primary-wide" onClick={()=>chooseTarget(target)}>LOCK TARGET</button>
+     <button className="primary-wide" onClick={createMission}>CREATE MISSION</button>
+    </div>
+
+    <div className="button-grid">
+     <button className="primary" onClick={()=>commandHandlerRef.current?.("START")}>▲ TAKE OFF</button>
+     <button onClick={()=>commandHandlerRef.current?.("LAND")}>▼ LAND</button>
+     <button onClick={()=>commandHandlerRef.current?.("AUTOPILOT")}>◆ AUTOPILOT</button>
+     <button className="warning" onClick={()=>commandHandlerRef.current?.("EMERGENCY")}>! EMERGENCY AUTO</button>
+     <button onClick={()=>commandHandlerRef.current?.("HOVER")}>● HOVER</button>
+     <button onClick={()=>commandHandlerRef.current?.("STOP")}>■ STOP</button>
+     <button onClick={()=>commandHandlerRef.current?.("GPS_TOGGLE")}>GPS {gps?"ON":"OFF"}</button>
+     <button onClick={addLiveObstacle}>⚠ ADD OBSTACLE</button>
+    </div>
+
+    <div className="manual-box">
+     <div className="section-label">FLIGHT STICK</div>
+     <div className="dpad">
+      <span></span><button onClick={()=>commandHandlerRef.current?.("UP")}>▲</button><span></span>
+      <button onClick={()=>commandHandlerRef.current?.("LEFT")}>◀</button><button onClick={()=>commandHandlerRef.current?.("HOVER")}>●</button><button onClick={()=>commandHandlerRef.current?.("RIGHT")}>▶</button>
+      <span></span><button onClick={()=>commandHandlerRef.current?.("DOWN")}>▼</button><span></span>
+     </div>
+     <div className="dpad dpad-secondary">
+      <button onClick={()=>commandHandlerRef.current?.("YAW_LEFT")}>↶</button><button onClick={()=>commandHandlerRef.current?.("ASCEND")}>＋ ALT</button><button onClick={()=>commandHandlerRef.current?.("YAW_RIGHT")}>↷</button>
+      <span></span><button onClick={()=>commandHandlerRef.current?.("DESCEND")}>− ALT</button><span></span>
+     </div>
+     <p className="hint">W A S D = MOVE · Q/E = YAW · ↑/↓ = ALTITUDE</p>
+    </div>
+
+    <div className="live-track">
+     <div className="section-label">LIVE FLIGHT STATUS</div>
+     <div className="track-grid">
+      <span>STATUS<b>{status}</b></span><span>PHASE<b>{phase}</b></span>
+      <span>MODE<b>{mode}</b></span><span>GPS<b className={gps?"ok":"danger"}>{gps?"CONNECTED":"LOST"}</b></span>
+      <span>ALTITUDE<b>{pos.y.toFixed(1)} m</b></span><span>SPEED<b>{speed.toFixed(1)} m/s</b></span>
+      <span>HEADING<b>{heading.toFixed(0)}°</b></span><span>SENSOR<b>{sensor?sensorDistance.toFixed(1)+" m":"CLEAR"}</b></span>
+     </div>
+    </div>
+
+    <div className="panel">
+     <h3>REMOTE LINK</h3>
+     <p>PHONE <b className={phoneConnected?"ok":"danger"}>{phoneConnected?"CONNECTED":"WAITING"}</b></p>
+     <p>LAST COMMAND <b>{phoneCommand}</b></p>
+     <p>MESSAGE {message}</p>
+    </div>
+   </aside>
   </main>
  </div>;
 }
