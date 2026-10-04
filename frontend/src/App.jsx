@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Grid, OrbitControls, PerspectiveCamera } from "@react-three/drei";
+import { Grid, PerspectiveCamera } from "@react-three/drei";
 import * as THREE from "three";
 
 const WORLD_SIZE = 3000;
@@ -203,9 +203,33 @@ function Marker({ point, color }) {
 }
 
 function Scene({ position, heading, flying, bank, pitch }) {
+  const camera = useRef();
+
+  useFrame((_, dt) => {
+    if (!camera.current) return;
+
+    // Fixed drone-follow camera: touch/drag on the 3D monitor cannot orbit the scene.
+    // The camera smoothly follows the drone and looks only in the drone's current heading.
+    const forward = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
+    const desiredCamera = new THREE.Vector3(
+      position.x - forward.x * 105,
+      position.y + 62,
+      position.z - forward.z * 105
+    );
+
+    camera.current.position.lerp(desiredCamera, Math.min(1, dt * 5));
+
+    const lookAt = new THREE.Vector3(
+      position.x + forward.x * 90,
+      position.y + 5,
+      position.z + forward.z * 90
+    );
+    camera.current.lookAt(lookAt);
+  });
+
   return (
     <>
-      <PerspectiveCamera makeDefault position={[110, 95, 170]} fov={50} />
+      <PerspectiveCamera ref={camera} makeDefault position={[110, 95, 170]} fov={50} />
       <ambientLight intensity={1.5} />
       <directionalLight position={[100, 250, 100]} intensity={2.5} castShadow />
       <Grid args={[WORLD_SIZE, WORLD_SIZE]} position={[0, 0, 0]} cellSize={25} sectionSize={150} fadeDistance={2200} />
@@ -218,7 +242,6 @@ function Scene({ position, heading, flying, bank, pitch }) {
       <Marker point={HOME} color="#ffd34d" />
       <Marker point={TARGET} color="#4dff9a" />
       <Drone position={position} heading={heading} flying={flying} bank={bank} pitch={pitch} />
-      <OrbitControls enableDamping dampingFactor={0.08} />
     </>
   );
 }
