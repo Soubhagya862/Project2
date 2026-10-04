@@ -4,7 +4,7 @@ import { Grid, OrbitControls, PerspectiveCamera } from "@react-three/drei";
 import * as THREE from "three";
 
 const WORLD_SIZE = 3000;
-const HOME = { x: 0, y: 4, z: 0 };
+const HOME = { x: 0, y: 28, z: 0 };
 const TARGET = { x: 1400, y: 100, z: -1100 };
 const START_PAD = { x: 0, y: 2, z: 0 };
 
@@ -94,10 +94,10 @@ function Drone({ position, heading, flying }) {
   ];
 
   return (
-    <group ref={group} position={[position.x, position.y, position.z]} scale={[2.6, 2.6, 2.6]}>
+    <group ref={group} position={[position.x, position.y, position.z]} scale={[5.5, 5.5, 5.5]}>
       {/* Large professional quadcopter body */}
-      <mesh castShadow>
-        <capsuleGeometry args={[2.2, 5.2, 8, 24]} rotation={[0, 0, Math.PI / 2]} />
+      <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
+        <capsuleGeometry args={[2.2, 5.2, 8, 24]} />
         <meshStandardMaterial color="#263238" metalness={0.85} roughness={0.2} />
       </mesh>
 
@@ -181,7 +181,7 @@ function Marker({ point, color }) {
 function Scene({ position, heading, flying }) {
   return (
     <>
-      <PerspectiveCamera makeDefault position={[180, 150, 280]} fov={55} />
+      <PerspectiveCamera makeDefault position={[110, 95, 170]} fov={50} />
       <ambientLight intensity={1.5} />
       <directionalLight position={[100, 250, 100]} intensity={2.5} castShadow />
       <Grid args={[WORLD_SIZE, WORLD_SIZE]} position={[0, 0, 0]} cellSize={25} sectionSize={150} fadeDistance={2200} />
@@ -233,7 +233,7 @@ export default function App() {
   const autoRef = useRef(false);
   const lastTime = useRef(performance.now());
 
-  const flying = position.y > 4.5;
+  const flying = position.y > HOME.y + 0.5;
   const distanceToTarget = useMemo(
     () => Math.hypot(position.x - TARGET.x, position.y - TARGET.y, position.z - TARGET.z),
     [position]
