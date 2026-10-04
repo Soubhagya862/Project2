@@ -12,10 +12,116 @@ const SOCKET_URL=import.meta.env.VITE_SOCKET_URL||"http://localhost:5000";
 const HOME={x:0,y:10,z:0};
 
 const baseObstacles=[
-  {position:{x:18,y:8,z:0},size:{x:10,y:16,z:12},type:"BUILDING"},
-  {position:{x:38,y:12,z:10},size:{x:10,y:24,z:10},type:"BUILDING"},
-  {position:{x:55,y:7,z:-12},size:{x:14,y:14,z:10},type:"BUILDING"},
-  {position:{x:30,y:6,z:-20},size:{x:9,y:12,z:9},type:"BUILDING"}
+  {position:{x:24,y:4,z:8},size:{x:7,y:8,z:7},type:"ROCK"},
+  {position:{x:42,y:3,z:-8},size:{x:6,y:6,z:6},type:"TREE"},
+  {position:{x:58,y:5,z:14},size:{x:10,y:10,z:5},type:"WALL"},
+  {position:{x:35,y:2.5,z:25},size:{x:5,y:5,z:5},type:"POLE"},
+  {position:{x:70,y:4,z:-22},size:{x:8,y:8,z:8},type:"DEBRIS"}
+];
+
+mport {useEffect,useMemo,useRef,useState} from "react";
+import {Canvas,useFrame,useThree} from "@react-three/fiber";
+import {Grid,Line} from "@react-three/drei";
+import * as THREE from "three";
+import {io} from "socket.io-client";
+import TelemetryPanel from "./components/TelemetryPanel";
+import MissionMonitor from "./components/MissionMonitor";
+import DroneSensors from "./components/DroneSensors";
+
+const API=import.meta.env.VITE_API_URL||"http://localhost:5000/api";
+const SOCKET_URL=import.meta.env.VITE_SOCKET_URL||"http://localhost:5000";
+const HOME={x:0,y:10,z:0};
+
+const baseObstacles=[
+  {position:{x:24,y:4,z:8},size:{x:7,y:8,z:7},type:"ROCK"},
+  {position:{x:42,y:3,z:-8},size:{x:6,y:6,z:6},type:"TREE"},
+  {position:{x:58,y:5,z:14},size:{x:10,y:10,z:5},type:"WALL"},
+  {position:{x:35,y:2.5,z:25},size:{x:5,y:5,z:5},type:"POLE"},
+  {position:{x:70,y:4,z:-22},size:{x:8,y:8,z:8},type:"DEBRIS"}
+];
+
+const cityBuildings=Array.from({length:30},(_,i)=>({
+  x:-35+(i*17)%105,
+  z:-42+((i*29)%84),
+  w:6+(i%4)*2,
+  d:6+(i%3)*2,
+  h:10+(i%7)*6
+})).filter(b=>Math.hypot(b.x,b.z)>10);
+
+function DroneModel({p,heading}){
+  const group=useRef();
+  useFrame((_,d)=>{
+    if(group.current)group.current.rotation.y=THREE.MathUtils.lerp(group.current.rotation.y,-heading*Math.PI/180,d*7);
+  });
+  return <group ref={group} position={[p.x,p.y,p.z]}>
+    <mesh castShadow><boxGeometry args={[3,.65,2.2]}/><meshStandardMaterial metalness={.75} roughness={.25}/></mesh>
+    <mesh position={[0,.35,0]}><sphereGeometry args={[.45,20,12]}/><meshStandardMaterial metalness={.8} roughness={.15}/></mesh>
+    <mesh position={[0,-.55,0]}><sphereGeometry args={[.3,16,10]}/><meshStandardMaterial/></mesh>
+    {[[-2,.55,-1.25],[2,.55,-1.25],[-2,.55,1.25],[2,.55,1.25]].map(([x,y,z],i)=>
+      <group key={i} position={[x,0,z]}>
+        <mesh><cylinderGeometry args={[.12,.16,.45,16]}/><meshStandardMaterial metalness={.8}/></mesh>
+        <mesh position={[0,.28,0]} rotation={[0,0,Math.PI/2]}>
+          <boxGeometry args={[1.8,.07,.12]}/><meshStandardMaterial/>
+        </mesh>
+      </group>
+    )}
+    <mesh position={[0,-.35,-1.05]} rotation={[Math.PI/2,0,0]}>
+      <cylinderGeometry args={[.38,.38,.18,24]}/><meshStandardMaterial/>
+    </mesh>
+    <pointLight position={[0,-.7,-1.2]} intensity={2} distance={7}/>
+  </group>;
+}
+
+function Building({b}){return <group position={[b.x,b.h/2,b.z]}>
+  <mesh castShadow receiveShadow><boxGeometry args={[b.w,b.h,b.d]}/><meshStandardMaterial metalness={.25} roughness={.65}/></mesh>
+  {Array.from({length:Math.max(1,Math.floor(b.h/4))},(_,r)=>(
+    <group key={r} position={[0,-b.h/2+2+r*4,0]}>
+      <mesh position={[0,0,b.d/2+.02]}><boxGeometry args={[b.w*.72,.8,.06]}/><meshStandardMaterial emissive={new THREE.Color("#5ddcff")} emissiveIntensity={.55}/></mesh>
+      <mesh position={[0,0,-b.d/2-.02]}><boxGeometry args={[b.w*.72,.8,.06]}/><meshStandardMaterial emissive={new THREE.Color("#5ddcff")} emissiveIntensity={.35}/></mesh>
+    </group>
+  ))}
+</group>}
+
+mport {useEffect,useMemo,useRef,useState} from "react";
+import {Canvas,useFrame,useThree} from "@react-three/fiber";
+import {Grid,Line} from "@react-three/drei";
+import * as THREE from "three";
+import {io} from "socket.io-client";
+import TelemetryPanel from "./components/TelemetryPanel";
+import MissionMonitor from "./components/MissionMonitor";
+import DroneSensors from "./components/DroneSensors";
+
+const API=import.meta.env.VITE_API_URL||"http://localhost:5000/api";
+const SOCKET_URL=import.meta.env.VITE_SOCKET_URL||"http://localhost:5000";
+const HOME={x:0,y:10,z:0};
+
+const baseObstacles=[
+  {position:{x:24,y:4,z:8},size:{x:7,y:8,z:7},type:"ROCK"},
+  {position:{x:42,y:3,z:-8},size:{x:6,y:6,z:6},type:"TREE"},
+  {position:{x:58,y:5,z:14},size:{x:10,y:10,z:5},type:"WALL"},
+  {position:{x:35,y:2.5,z:25},size:{x:5,y:5,z:5},type:"POLE"},
+  {position:{x:70,y:4,z:-22},size:{x:8,y:8,z:8},type:"DEBRIS"}
+];
+
+mport {useEffect,useMemo,useRef,useState} from "react";
+import {Canvas,useFrame,useThree} from "@react-three/fiber";
+import {Grid,Line} from "@react-three/drei";
+import * as THREE from "three";
+import {io} from "socket.io-client";
+import TelemetryPanel from "./components/TelemetryPanel";
+import MissionMonitor from "./components/MissionMonitor";
+import DroneSensors from "./components/DroneSensors";
+
+const API=import.meta.env.VITE_API_URL||"http://localhost:5000/api";
+const SOCKET_URL=import.meta.env.VITE_SOCKET_URL||"http://localhost:5000";
+const HOME={x:0,y:10,z:0};
+
+const baseObstacles=[
+  {position:{x:24,y:4,z:8},size:{x:7,y:8,z:7},type:"ROCK"},
+  {position:{x:42,y:3,z:-8},size:{x:6,y:6,z:6},type:"TREE"},
+  {position:{x:58,y:5,z:14},size:{x:10,y:10,z:5},type:"WALL"},
+  {position:{x:35,y:2.5,z:25},size:{x:5,y:5,z:5},type:"POLE"},
+  {position:{x:70,y:4,z:-22},size:{x:8,y:8,z:8},type:"DEBRIS"}
 ];
 
 const cityBuildings=Array.from({length:30},(_,i)=>({
@@ -65,7 +171,7 @@ function City(){return <group>{cityBuildings.map((b,i)=><Building key={i} b={b}/
 function Obstacle({o,dynamic=false}){
   return <mesh position={[o.position.x,o.position.y,o.position.z]} castShadow>
     <boxGeometry args={[o.size.x,o.size.y,o.size.z]}/>
-    <meshStandardMaterial transparent opacity={dynamic?.75:.42} metalness={.15} roughness={.6} emissive={dynamic?new THREE.Color("#ff2f55"):new THREE.Color("#172b4d")} emissiveIntensity={dynamic?.65:.2}/>
+    <meshStandardMaterial transparent opacity={dynamic?.78:.95} metalness={.15} roughness={.75} color={color} emissive={dynamic?new THREE.Color("#ff2f55"):new THREE.Color("#000000")} emissiveIntensity={dynamic?.65:0}/>
   </mesh>;
 }
 
@@ -124,7 +230,7 @@ function App(){
   const [mission,setMission]=useState(null);
   const [sensor,setSensor]=useState(false);
   const [sensorDistance,setSensorDistance]=useState(12);
-  const [message,setMessage]=useState("System ready");
+  const [message,setMessage]=useState("Choose a destination to begin");\n  const [destinationChosen,setDestinationChosen]=useState(false);
   const [obstacles,setObstacles]=useState(baseObstacles);
 
   pathRef.current=path;
@@ -151,7 +257,7 @@ function App(){
     try{await fetch(API+`/missions/${mission._id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});}catch{}
   }
 
-  async function calculate(from=pos,to=target){
+  async function calculate(from=pos,to=target){\n    if(!destinationChosen){setMessage("Choose a destination before calculating the route");return [];}
     try{
       const r=await fetch(API+"/routes/calculate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({start:from,goal:to,obstacles})});
       if(!r.ok)throw new Error();
@@ -161,7 +267,7 @@ function App(){
     }catch{setPath([]);setMessage("Backend unavailable — start backend on port 5000");return []}
   }
 
-  async function create(){
+  function chooseDestination(){setDestinationChosen(true);setMessage(`Destination selected: ${target.x}, ${target.y}, ${target.z}`);}\n\n  async function create(){
     const p=await calculate(); if(!p.length)return;
     try{
       const r=await fetch(API+"/missions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({start:HOME,target,route:p,gpsStatus:gps?"CONNECTED":"DENIED",status:"READY",phase:"PLANNED"})});
@@ -278,9 +384,9 @@ function App(){
       </section>
       <aside className="control-panel">
         <div className="panel-heading"><span>MISSION CONTROL</span><small>REMOTE + AUTONOMOUS</small></div>
-        <div className="target-box"><div className="section-label">TARGET LOCATION</div><div className="coord-grid"><label>X<input type="number" value={target.x} onChange={e=>setTarget({...target,x:+e.target.value})}/></label><label>ALT<input type="number" value={target.y} onChange={e=>setTarget({...target,y:Math.max(2,+e.target.value)})}/></label><label>Z<input type="number" value={target.z} onChange={e=>setTarget({...target,z:+e.target.value})}/></label></div><p className="hint">Camera locked. The environment is frozen; only the drone follows the calculated route.</p></div>
+        <div className="target-box"><div className="section-label">CHOOSE DESTINATION</div><div className="coord-grid"><label>X<input type="number" value={target.x} onChange={e=>setTarget({...target,x:+e.target.value})}/></label><label>ALT<input type="number" value={target.y} onChange={e=>setTarget({...target,y:Math.max(2,+e.target.value)})}/></label><label>Z<input type="number" value={target.z} onChange={e=>setTarget({...target,z:+e.target.value})}/></label></div><button className="primary" onClick={chooseDestination}>✓ CHOOSE DESTINATION</button><p className="hint">{destinationChosen?"Destination locked. Calculate the route, then takeoff.":"Select X / ALT / Z, then choose the destination before takeoff."}</p></div>
         <div className="button-grid"><button onClick={()=>calculate()}>CALCULATE 3D A*</button><button onClick={create}>CREATE MISSION</button><button className="primary" onClick={start}>TAKEOFF / START</button><button onClick={stop}>STOP / LAND</button><button className="warning" onClick={addObstacle}>＋ LIVE OBSTACLE</button><button className="warning" onClick={disconnect}>{gps?"GPS DISCONNECT":"GPS RESTORE"}</button></div>
-        <div className="manual-box"><div className="section-label">FLIGHT VIEW LOCK</div><div className="hint">MOUSE / TOUCH CAMERA CONTROL: DISABLED</div><div className="hint">WORLD: FROZEN · DRONE: AUTONOMOUS</div></div>
+        <div className="manual-box"><div className="section-label">FLIGHT SEQUENCE</div><div className="hint">MOUSE / TOUCH CAMERA CONTROL: DISABLED</div><div className="hint">1. CHOOSE DESTINATION → 2. CALCULATE ROUTE → 3. TAKEOFF → 4. AUTONOMOUS FLIGHT</div></div>
         <MissionMonitor status={status} phase={phase} gps={gps} waypoints={path.length} missionId={mission?._id} phoneCommand={phoneCommand} phoneConnected={phoneConnected} sensor={sensor}/>
         <TelemetryPanel data={{...pos,altitude:pos.y,speed,distance,heading,sensorDistance}}/>
         <div className="message">{message}</div>
