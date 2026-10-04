@@ -419,6 +419,8 @@ export default function App() {
   const [missionId, setMissionId] = useState(null);
   const [showTargetMap, setShowTargetMap] = useState(false);
   const [pendingTarget, setPendingTarget] = useState(null);
+  const [pathPoints, setPathPoints] = useState([]);
+  const [targetSelectionPhase, setTargetSelectionPhase] = useState("TARGET");
   const socketRef = useRef(null);
   const estimatorRef = useRef({ ...HOME, bias:{x:0,y:0,z:0} });
 
@@ -492,29 +494,77 @@ export default function App() {
 
   const selectTarget = () => {
     setPendingTarget({ ...target });
+    setPathPoints([]);
+    setTargetSelectionPhase("TARGET");
     setShowTargetMap(true);
   };
 
   const confirmTarget = () => {
     if (!pendingTarget) return;
-    const nextTarget = { x:clamp(pendingTarget.x,WORLD.minX,WORLD.maxX), y:clamp(pendingTarget.y,30,WORLD.maxY), z:clamp(pendingTarget.z,WORLD.minZ,WORLD.maxZ) };
+    const nextTarget = {
+      x:clamp(pendingTarget.x,WORLD.minX,WORLD.maxX),
+      y:clamp(pendingTarget.y,30,WORLD.maxY),
+      z:clamp(pendingTarget.z,WORLD.minZ,WORLD.maxZ)
+    };
     setTarget(nextTarget);
-    setRoute(createRoute(position,nextTarget));
-    setMissionState("READY");
-    setShowTargetMap(false);
-    setPendingTarget(null);
+    setPathPoints([]);
+    setTargetSelectionPhase("PATH");
   };
 
   const chooseMapTarget = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const nx = clamp((event.clientX-rect.left)/rect.width,0,1);
     const nz = clamp((event.clientY-rect.top)/rect.height,0,1);
-    setPendingTarget({ x:WORLD.minX+nx*(WORLD.maxX-WORLD.minX), y:120, z:WORLD.minZ+nz*(WORLD.maxZ-WORLD.minZ) });
+    const point = {
+      x:WORLD.minX+nx*(WORLD.maxX-WORLD.minX),
+      y:120,
+      z:WORLD.minZ+nz*(WORLD.maxZ-WORLD.minZ)
+    };
+
+    if (targetSelectionPhase === "TARGET") {
+      setPendingTarget(point);
+      return;
+    }
+
+    // PATH mode: every click creates the next waypoint. The target itself
+    // is kept as the final destination and does not need to be clicked.
+    if (segmentBlocked(
+      pathPoints.length ? pathPoints[pathPoints.length - 1] : position,
+      point
+    )) return;
+
+    setPathPoints((old) => [...old, point]);
+  };
+
+  const removeLastPathPoint = () => {
+    setPathPoints((old) => old.slice(0, -1));
+  };
+
+  const clearPathPoints = () => setPathPoints([]);
+
+  const confirmPath = () => {
+    if (!pendingTarget || !pathPoints.length) return;
+    const nextTarget = {
+      x:clamp(pendingTarget.x,WORLD.minX,WORLD.maxX),
+      y:clamp(pendingTarget.y,30,WORLD.maxY),
+      z:clamp(pendingTarget.z,WORLD.minZ,WORLD.maxZ)
+    };
+    const finalSegmentBlocked = segmentBlocked(pathPoints[pathPoints.length - 1], nextTarget);
+    if (finalSegmentBlocked) return;
+
+    const nextRoute = [{ ...position }, ...pathPoints.map((p) => ({ ...p })), nextTarget];
+    setTarget(nextTarget);
+    setRoute(nextRoute);
+    setMissionState("READY");
+    setShowTargetMap(false);
+    setPendingTarget(null);
+    setPathPoints([]);
+    setTargetSelectionPhase("TARGET");
   };
 
   const reset = () => {
     setPosition({ ...HOME }); setEstimatedPosition({ ...HOME }); estimatorRef.current={...HOME,bias:{x:0,y:0,z:0}};
-    setHeading(0); setSpeed(0); setBattery(100); setMissionState("READY"); setRoute([]); setSensorError(0); setDetectedObstacle(null); setReplans(0); setMissionId(null);
+    setHeading(0); setSpeed(0); setBattery(100); setMissionState("READY"); setRoute([]); setSensorError(0); setDetectedObstacle(null); setReplans(0); setMissionId(null); setShowTargetMap(false); setPendingTarget(null); setPathPoints([]); setTargetSelectionPhase("TARGET");
   };
 
   return (
@@ -580,15 +630,109 @@ export default function App() {
       {showTargetMap && (
         <div className="target-map-overlay">
           <div className="target-map-modal">
-            <div className="target-map-head"><div><b>SELECT TARGET</b><small>3 KM SIMULATION ENVIRONMENT • CLICK ANY LOCATION</small></div><button className="map-close" onClick={() => {setShowTargetMap(false);setPendingTarget(null);}}>×</button></div>
+            <div className="target-map-head">
+              <div>
+                <b>{targetSelectionPhase === "TARGET" ? "STEP 1 • SELECT TARGET" : "STEP 2 • DRAW FLIGHT PATH"}</b>
+                <small>
+                  {targetSelectionPhase === "TARGET"
+                    ? "CLICK ANY LOCATION ON THE 3 KM SIMULATION MAP"
+                    : "CLICK POINT BY POINT TO CREATE THE DRONE ROUTE"}
+                </small>
+              </div>
+              <button className="map-close" onClick={() => {
+                setShowTargetMap(false);
+                setPendingTarget(null);
+                setPathPoints([]);
+                setTargetSelectionPhase("TARGET");
+              }}>×</button>
+            </div>
+
             <div className="target-map" onClick={chooseMapTarget}>
               <div className="map-grid large" />
-              {OBSTACLES.map((o)=><span key={o.id} className="map-obstacle" style={{left:((o.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",top:((o.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%",width:(o.sx/(WORLD.maxX-WORLD.minX))*100+"%",height:(o.sz/(WORLD.maxZ-WORLD.minZ))*100+"%"}} />)}
-              <span className="map-home" style={{left:((HOME.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",top:((HOME.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"}} />
-              {pendingTarget && <span className="map-target pending" style={{left:((pendingTarget.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",top:((pendingTarget.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"}} />}
-              <div className="map-label top">3 KM SIMULATION AREA</div><div className="map-label bottom">CLICK ANYWHERE TO PLACE TARGET</div>
+
+              {OBSTACLES.map((o) => (
+                <span key={o.id} className="map-obstacle" style={{
+                  left:((o.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",
+                  top:((o.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%",
+                  width:(o.sx/(WORLD.maxX-WORLD.minX))*100+"%",
+                  height:(o.sz/(WORLD.maxZ-WORLD.minZ))*100+"%"
+                }} />
+              ))}
+
+              <span className="map-home" style={{
+                left:((HOME.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",
+                top:((HOME.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"
+              }} />
+
+              {pendingTarget && (
+                <span className="map-target pending" style={{
+                  left:((pendingTarget.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",
+                  top:((pendingTarget.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"
+                }} />
+              )}
+
+              {targetSelectionPhase === "PATH" && (
+                <>
+                  <Line
+                    points={[
+                      [position.x, 0, position.z],
+                      ...pathPoints.map(p => [p.x, 0, p.z]),
+                      [pendingTarget.x, 0, pendingTarget.z]
+                    ]}
+                    color="#58e7ff"
+                    lineWidth={2}
+                    dashed
+                    dashSize={10}
+                    gapSize={5}
+                  />
+                  {pathPoints.map((p,i) => (
+                    <span key={i} className="map-waypoint" style={{
+                      left:((p.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",
+                      top:((p.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"
+                    }}>
+                      <b>{i+1}</b>
+                    </span>
+                  ))}
+                </>
+              )}
+
+              <div className="map-label top">
+                {targetSelectionPhase === "TARGET" ? "TARGET SELECTION" : "PATH PLANNER • POINT BY POINT"}
+              </div>
+              <div className="map-label bottom">
+                {targetSelectionPhase === "TARGET"
+                  ? "1. CLICK TARGET → 2. CONFIRM TARGET"
+                  : "CLICK ROUTE POINTS → FINISH PATH"}
+              </div>
             </div>
-            <div className="target-map-actions"><span>{pendingTarget ? "TARGET • X "+pendingTarget.x.toFixed(0)+"m • Z "+pendingTarget.z.toFixed(0)+"m" : "NO TARGET SELECTED"}</span><button className="mode" onClick={() => {setShowTargetMap(false);setPendingTarget(null);}}>CANCEL</button><button className="primary-button" disabled={!pendingTarget} onClick={confirmTarget}>CONFIRM TARGET</button></div>
+
+            <div className="target-map-actions">
+              {targetSelectionPhase === "TARGET" ? (
+                <>
+                  <span>{pendingTarget ? "TARGET SELECTED • NOW CONFIRM IT" : "NO TARGET SELECTED"}</span>
+                  <button className="mode" onClick={() => {
+                    setShowTargetMap(false);
+                    setPendingTarget(null);
+                  }}>CANCEL</button>
+                  <button className="primary-button" disabled={!pendingTarget} onClick={confirmTarget}>
+                    CONFIRM TARGET
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span>
+                    {pathPoints.length
+                      ? `${pathPoints.length} WAYPOINT${pathPoints.length === 1 ? "" : "S"} SELECTED • TARGET IS FINAL POINT`
+                      : "SELECT YOUR FIRST ROUTE POINT"}
+                  </span>
+                  <button className="mode" onClick={removeLastPathPoint} disabled={!pathPoints.length}>UNDO</button>
+                  <button className="mode" onClick={clearPathPoints} disabled={!pathPoints.length}>CLEAR</button>
+                  <button className="primary-button" disabled={!pathPoints.length} onClick={confirmPath}>
+                    FINISH PATH
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
