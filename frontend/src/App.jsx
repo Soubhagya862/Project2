@@ -3,7 +3,6 @@ import {Canvas,useFrame,useThree} from "@react-three/fiber";
 import {Grid,Line} from "@react-three/drei";
 import * as THREE from "three";
 import {io} from "socket.io-client";
-import TelemetryPanel from "./components/TelemetryPanel";
 import MissionMonitor from "./components/MissionMonitor";
 import DroneSensors from "./components/DroneSensors";
 
@@ -134,10 +133,10 @@ function App(){
  const [obstacles,setObstacles]=useState(BASE_OBSTACLES),[gps,setGps]=useState(true),[mode,setMode]=useState("MANUAL");
  const [status,setStatus]=useState("READY"),[phase,setPhase]=useState("IDLE"),[speed,setSpeed]=useState(0),[heading,setHeading]=useState(0);
  const [mission,setMission]=useState(null),[sensor,setSensor]=useState(false),[sensorDistance,setSensorDistance]=useState(14),[message,setMessage]=useState("Choose a destination to begin");
- const [phoneConnected,setPhoneConnected]=useState(false),[phoneCommand,setPhoneCommand]=useState("STOP"),[destinationChosen,setDestinationChosen]=useState(false),[landing,setLanding]=useState(false),[takeoffCountdown,setTakeoffCountdown]=useState(null);
+ const [phoneConnected,setPhoneConnected]=useState(false),[phoneCommand,setPhoneCommand]=useState("STOP"),[destinationChosen,setDestinationChosen]=useState(false),[landing,setLanding]=useState(false),[takeoffCountdown,setTakeoffCountdown]=useState(null),[audioReady,setAudioReady]=useState(false);
  pathRef.current=path; missionRef.current=mission;
  const flying=speed>0&&pos.y>2.5;
- const speak=text=>{try{window.speechSynthesis?.cancel();const u=new SpeechSynthesisUtterance(text);u.rate=.95;window.speechSynthesis?.speak(u)}catch{}};
+ const speak=text=>{try{window.speechSynthesis?.cancel();const u=new SpeechSynthesisUtterance(text);u.rate=.95;window.speechSynthesis?.speak(u);setAudioReady(true)}catch{}};
 
  const patchMission=async data=>{if(!missionRef.current?._id)return;try{await fetch(API+`/missions/${missionRef.current._id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)})}catch{}};
 
