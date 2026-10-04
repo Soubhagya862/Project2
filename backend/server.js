@@ -39,8 +39,8 @@ io.on("connection",socket=>{
     if(typeof command!=="string"||!command.trim())return;
     latestFlightCommand={id:latestFlightCommand.id+1,command:command.trim(),time:Date.now()};
     for(const [id,client] of connectedClients){
-      if(client.role==="simulator")io.to(id).emit("flight-control-command",latestFlightCommand);
       if(source==="controller"&&client.role==="bridge")io.to(id).emit("controller-command",latestFlightCommand);
+      if(source!=="controller"&&client.role==="simulator")io.to(id).emit("flight-control-command",latestFlightCommand);
     }
   };
 
@@ -53,8 +53,7 @@ io.on("connection",socket=>{
   socket.on("controller-control",data=>{
     const sender=connectedClients.get(socket.id);
     if(sender?.role!=="controller"||typeof data!=="string")return;
-    // The phone bridge is the transport path; the backend also forwards to
-    // the simulator so localhost control remains functional if bridge drops.
+    // Controller commands must cross the phone bridge before reaching the drone.
     publishCommand(data,"controller");
   });
 
