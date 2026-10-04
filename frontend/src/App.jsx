@@ -324,7 +324,7 @@ function App(){
     const s=io(SOCKET_URL);socketRef.current=s;
     s.on("connect",()=>setPhoneConnected(true));s.on("disconnect",()=>setPhoneConnected(false));
     s.on("phone-control",cmd=>{setPhoneCommand(cmd);
-      if(cmd==="START")startRef.current?.(); else if(cmd==="STOP")stopRef.current?.(); else if(cmd==="GPS_TOGGLE")disconnectRef.current?.(); else if(cmd==="EMERGENCY"){setGps(false);if(pathRef.current.length){setAuto(true);setStatus("EMERGENCY AUTOPILOT");setPhase("PHONE EMERGENCY CONTROL");setMessage("Emergency autopilot activated from remote")}else setMessage("Calculate a route before emergency mode")} else manualMove(cmd);
+      if(cmd==="START")startRef.current?.(); else if(cmd==="STOP")stopRef.current?.(); else if(cmd==="GPS_TOGGLE")disconnectRef.current?.(); else if(cmd==="EMERGENCY"){setGps(false);if(pathRef.current.length){setAuto(true);setStatus("EMERGENCY AUTOPILOT");setPhase("PHONE EMERGENCY CONTROL");setMessage("Emergency autopilot activated from remote")}else setMessage("Calculate a route before emergency mode")} else if(cmd.startsWith("TARGET:")){try{const t=JSON.parse(cmd.slice(7));setTarget({x:Number(t.x)||0,y:Math.max(2,Number(t.y)||10),z:Number(t.z)||0});setDestinationChosen(true);setMessage("Remote destination selected");}catch{setMessage("Invalid remote destination");}} else manualMove(cmd);
     });
     return()=>s.disconnect();
   },[]);
