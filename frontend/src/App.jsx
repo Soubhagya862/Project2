@@ -219,17 +219,25 @@ function App(){
  }
  async function startAutopilot(autoPilot=false){
    if(takeoffCountdown!==null)return;
-   if(destinationChosen && !path.length){
+   if(destinationChosen && autoPilot && !path.length){
      const r=await calculate();
      if(!r.length)return;
    }
-   setStatus("TAKEOFF PREPARING");setPhase("TAKEOFF COUNTDOWN");setSpeed(0);
-   for(let i=5;i>0;i--){setTakeoffCountdown(i);await new Promise(res=>setTimeout(res,1000))}
+   // TAKE OFF is an immediate user action in the simulator.
    setTakeoffCountdown(null);
+   setLanding(false);
+   setStatus("TAKEOFF");
+   setPhase("TAKEOFF COMPLETE");
+   setMessage("Drone is ready to take up");
+   speak("Drone is ready to take up");
    setPos(p=>({...p,y:30}));
-   setStatus("AIRBORNE");setPhase(autoPilot&&path.length?"AUTOPILOT FLIGHT":"MANUAL FLIGHT READY");setMode(autoPilot&&path.length?"AUTOPILOT":"MANUAL");setSpeed(autoPilot&&path.length?10:0);setLanding(false);manualAnnounced.current=false;
+   setStatus("AIRBORNE");
+   setPhase(autoPilot&&path.length?"AUTOPILOT FLIGHT":"MANUAL FLIGHT READY");
+   setMode(autoPilot&&path.length?"AUTOPILOT":"MANUAL");
+   setSpeed(autoPilot&&path.length?10:0);
+   manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,active:false};
+   manualAnnounced.current=false;
    setMessage(autoPilot&&path.length?"Autopilot engaged — following safe route":"Drone is airborne — use phone controller to fly");
-   speak("Your drone is ready to fly");
  }
 
  async function stopFlight(){
@@ -341,11 +349,9 @@ function App(){
   const tick=now=>{
     const dt=Math.min((now-lastTime)/1000,.033);lastTime=now;
     const m=manualMotionRef.current;
-    if(mode==="MANUAL"&&now<m.until){
+    if(mode==="MANUAL"&&m.active){
       setPos(p=>({x:THREE.MathUtils.clamp(p.x+m.vx*dt,WORLD.minX,WORLD.maxX),y:THREE.MathUtils.clamp(p.y+m.vy*dt,2,WORLD.maxY),z:THREE.MathUtils.clamp(p.z+m.vz*dt,WORLD.minZ,WORLD.maxZ)}));
       if(m.yaw)setHeading(h=>h+m.yaw*dt);
-    }else if(mode==="MANUAL"&&m.until!==0){
-      manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,until:0};setSpeed(0);setPhase("REMOTE CONTROL IDLE");
     }
     raf=requestAnimationFrame(tick);
   };
