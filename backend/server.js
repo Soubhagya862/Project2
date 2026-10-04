@@ -34,13 +34,10 @@ io.on("connection",socket=>{
 
   socket.on("phone-control",data=>{
     const sender=connectedClients.get(socket.id);
-
-    if(sender?.role!=="phone"||typeof data!=="string")return;
-
+    if(sender?.role!=="phone"||typeof data!=="string"||!data.trim())return;
+    latestFlightCommand={id:latestFlightCommand.id+1,command:data.trim(),time:Date.now()};
     for(const [id,client] of connectedClients){
-      if(client.role==="simulator"){
-        io.to(id).emit("flight-control-command",data);
-      }
+      if(client.role==="simulator")io.to(id).emit("flight-control-command",latestFlightCommand);
     }
   });
 
