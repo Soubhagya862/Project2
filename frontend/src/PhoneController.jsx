@@ -8,7 +8,7 @@ function getLanBackendUrl(){
  return `http://${window.location.hostname}:5000`;
 }
 const SOCKET_URL=getLanBackendUrl();
-const COMMAND_API=(import.meta.env.VITE_API_URL||`${window.location.protocol}//${window.location.hostname}:5000/api`).replace(/\/$/,"");
+const COMMAND_API=(()=>{const v=import.meta.env.VITE_API_URL?.trim();if(v&&!/localhost|127\\.0\\.0\\.1/i.test(v))return v.replace(/\\/$/,"");return `${window.location.protocol}//${window.location.hostname}:5000/api`;})();
 
 const DEFAULT_TARGET={x:700,y:60,z:450};
 const KEY_COMMANDS={w:"UP",s:"DOWN",a:"LEFT",d:"RIGHT",q:"YAW_LEFT",e:"YAW_RIGHT","ArrowUp":"ASCEND","ArrowDown":"DESCEND"};
@@ -50,8 +50,16 @@ export default function PhoneController(){
 
  function send(command){
   setLast(command);
-  if(socketRef.current?.connected)socketRef.current.emit("phone-control",command);
-  else setLast("OFFLINE");
+  if(command==="START"){
+    try{window.speechSynthesis?.cancel();window.speechSynthesis?.speak(new SpeechSynthesisUtterance("Drone is ready to take up"));}catch{}
+  }else if(command==="LAND"){
+    try{window.speechSynthesis?.cancel();window.speechSynthesis?.speak(new SpeechSynthesisUtterance("Drone landing"));}catch{}
+  }else if(command==="HOVER"){
+    try{window.speechSynthesis?.cancel();window.speechSynthesis?.speak(new SpeechSynthesisUtterance("Drone holding position"));}catch{}
+  }
+  fetch(COMMAND_API+"/flight-command",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({command}),cache:"no-store"})
+    .then(r=>{if(!r.ok)throw Error()})
+    .catch(()=>setLast("COMMAND SERVER OFFLINE"));
  }
 
  function selectTargetFromMap(e){
