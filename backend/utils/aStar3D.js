@@ -15,7 +15,8 @@ export function findPath(
   goal,
   obstacles=[],
   bounds={minX:0,maxX:80,minY:0,maxY:40,minZ:-40,maxZ:40},
-  margin=2
+  margin=2,
+  step=20
 ){
   const blocked=p=>obstacles.some(o=>{
     const pos=o.position||{x:0,y:0,z:0};
@@ -38,7 +39,8 @@ export function findPath(
 
   if(blocked(s)||blocked(g)) return [];
 
-  const stepSize=Math.max(1,Number(step)||20);\n  const open=[s];
+  const stepSize=Math.max(1,Number(step)||20);
+  const open=[s];
   const openKeys=new Set([key(s)]);
   const came=new Map();
   const gScore=new Map([[key(s),0]]);
@@ -63,7 +65,7 @@ export function findPath(
     }
 
     for(const [dx,dy,dz] of dirs){
-      const n={x:cur.x+dx,y:cur.y+dy,z:cur.z+dz};
+      const n={x:cur.x+dx*stepSize,y:cur.y+dy*stepSize,z:cur.z+dz*stepSize};
       if(
         n.x<bounds.minX||n.x>bounds.maxX||
         n.y<bounds.minY||n.y>bounds.maxY||
