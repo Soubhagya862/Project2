@@ -232,10 +232,10 @@ function App(){
   s.on("phone-control",async cmd=>{
    setPhoneCommand(cmd);
    if(cmd==="START")startAutopilot();
-   else if(cmd==="STOP")stopFlight();
+   else if(cmd==="STOP"||cmd==="LAND")stopFlight();
    else if(cmd==="EMERGENCY")emergencyAutopilot();
    else if(cmd==="GPS_TOGGLE")toggleGps();
-   else if(cmd.startsWith("TARGET:")){try{const t=JSON.parse(cmd.slice(7));await chooseTarget(t)}catch{setMessage("Invalid remote target")}}
+   else if(cmd.startsWith("TARGET:")){try{const t=JSON.parse(cmd.slice(7));await chooseTarget(t);setRemoteControl("TARGET")}catch{setMessage("Invalid remote target")}}
    else manualMove(cmd);
   });
   return()=>s.disconnect();
