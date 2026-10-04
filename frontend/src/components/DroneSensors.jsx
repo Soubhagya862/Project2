@@ -57,7 +57,7 @@ export default function DroneSensors({position,obstacles=[],range=12,onDetection
   });
 
   return <group position={[position.x,position.y,position.z]}>
-    {lines.map((line,i)=>{
+    {DIRECTIONS.map((line,i)=>{
       const sensor=DIRECTIONS[i];
       const hit=hits[sensor.name]??range;
       const length=Math.max(0.5,Math.min(range,hit));
