@@ -9,6 +9,9 @@ function getLanBackendUrl(){
 }
 const SOCKET_URL=getLanBackendUrl();
 
+const DEFAULT_TARGET={x:700,y:60,z:450};
+const KEY_COMMANDS={w:"UP",s:"DOWN",a:"LEFT",d:"RIGHT",q:"YAW_LEFT",e:"YAW_RIGHT","ArrowUp":"ASCEND","ArrowDown":"DESCEND"};
+
 export default function PhoneController(){
  const socketRef=useRef(null);
  const joystickRef=useRef(null);
@@ -16,13 +19,16 @@ export default function PhoneController(){
  const joystickVectorRef=useRef({x:0,y:0});
  const joystickTimerRef=useRef(null);
  const lastJoystickCommandRef=useRef("");
+ const targetPendingRef=useRef(false);
+ const keyboardRef=useRef(new Set());
+
  const [connected,setConnected]=useState(false);
  const [last,setLast]=useState("HOVER");
  const [confirmed,setConfirmed]=useState(false);
  const [joystick,setJoystick]=useState({x:0,y:0});
- const [target,setTarget]=useState({x:700,y:60,z:450});
+ const [target,setTarget]=useState(DEFAULT_TARGET);
  const [battery,setBattery]=useState(100);
- const [telemetry,setTelemetry]=useState({x:0,y:12,z:0,speed:0,heading:0,gps:"CONNECTED",status:"READY",phase:"IDLE",mode:"MANUAL",target:{x:65,y:16,z:0},distanceToTarget:0,sensorDistance:18});
+ const [telemetry,setTelemetry]=useState({x:0,y:2,z:0,speed:0,heading:0,gps:"CONNECTED",status:"READY",phase:"IDLE",mode:"MANUAL",target:DEFAULT_TARGET,distanceToTarget:0,sensorDistance:18});
 
  useEffect(()=>{
   const s=io(SOCKET_URL,{transports:["websocket","polling"],reconnection:true});
@@ -33,7 +39,8 @@ export default function PhoneController(){
    if(!d)return;
    setTelemetry(d);
    if(typeof d.battery==="number")setBattery(d.battery);
-   if(d.target){setTarget(d.target);if(d.status&&d.status!=="READY")setConfirmed(true)}
+   // Do not overwrite a target the operator is currently selecting.
+   if(d.target&&!targetPendingRef.current)setTarget(d.target);
   });
   return()=>s.disconnect();
  },[]);
@@ -44,11 +51,33 @@ export default function PhoneController(){
   else setLast("OFFLINE");
  }
 
- function selectTarget(){
-  const safe={x:Number(target.x)||0,y:Math.max(5,Number(target.y)||30),z:Number(target.z)||0};
-  setTarget(safe);setConfirmed(true);setLast("TARGET");
-  socketRef.current?.emit("target-sync",safe);
-  socketRef.current?.emit("phone-control","TARGET:"+JSON.stringify(safe));
+ function selectTargetFromMap(e){
+  const r=e.currentTarget.getBoundingClientRect();
+  const x=Math.round(((e.clientX-r.left)/r.width-.5)*3000);
+  const z=Math.round(((e.clientY-r.top)/r.height-.5)*3000);
+  const next={x,y:60,z};
+  targetPendingRef.current=true;
+  setTarget(next);
+  setConfirmed(false);
+  setLast("TARGET SELECTED");
+ }
+
+ function confirmTarget(){
+  const safe={x:Number(target.x)||0,y:Math.max(5,Number(target.y)||60),z:Number(target.z)||0};
+  targetPendingRef.current=false;
+  setTarget(safe);
+  setConfirmed(true);
+  setLast("TARGET CONFIRMED");
+  send("TARGET:"+JSON.stringify(safe));
+ }
+
+ function setMode(mode){
+  if(mode==="MANUAL"){
+   send("HOVER");
+   return;
+  }
+  if(mode==="AUTOPILOT")send("AUTOPILOT");
+  if(mode==="EMERGENCY")send("EMERGENCY");
  }
 
  function joystickCommand(x,y){
@@ -96,6 +125,30 @@ export default function PhoneController(){
   try{joystickRef.current?.releasePointerCapture?.(e.pointerId)}catch{}
  }
 
+ useEffect(()=>{
+  const down=e=>{
+   const command=KEY_COMMANDS[e.key];
+   if(!command||keyboardRef.current.has(e.key))return;
+   e.preventDefault();
+   keyboardRef.current.add(e.key);
+   send(command);
+  };
+  const up=e=>{
+   const command=KEY_COMMANDS[e.key];
+   if(!command)return;
+   e.preventDefault();
+   keyboardRef.current.delete(e.key);
+   if(keyboardRef.current.size===0)send("HOVER");
+  };
+  window.addEventListener("keydown",down);
+  window.addEventListener("keyup",up);
+  return()=>{
+   window.removeEventListener("keydown",down);
+   window.removeEventListener("keyup",up);
+   keyboardRef.current.clear();
+  };
+ },[]);
+
  useEffect(()=>()=>clearInterval(joystickTimerRef.current),[]);
 
  const droneLeft=50+Math.max(-46,Math.min(46,Number(telemetry.x||0)/30));
@@ -104,70 +157,89 @@ export default function PhoneController(){
  const targetTop=50+Math.max(-40,Math.min(40,Number(target.z||0)/30));
  const gpsLost=telemetry.gps!=="CONNECTED";
 
- return <div className="phone-controller">
-  <header className="remote-header">
-   <div><h1>NAVIGATE-X</h1><p>FLIGHT CONTROL</p></div>
-   <span className={connected?"ok":"danger"}>● {connected?"LINKED":"OFFLINE"}</span>
+ return <div className="flight-control-page">
+  <header className="fc-header">
+   <div><h1>NAVIGATE-X <span>◈</span></h1><p>FLIGHT CONTROL / GPS-DENIED NAVIGATION</p></div>
+   <div className="fc-link"><b className={connected?"ok":"danger"}>● {connected?"LINKED":"OFFLINE"}</b><span>PC CONTROL: WASD + Q/E</span></div>
   </header>
 
-  <section className="camera-monitor">
-   <div className="camera-top"><span>● LIVE FPV CAMERA</span><span>{telemetry.mode||"MANUAL"}</span></div>
-   <div className="camera-screen">
-    <div className="camera-sky"></div>
-    <div className="camera-horizon"></div>
-    <div className="camera-ground"></div>
-    <div className="camera-reticle">+</div>
-    <div className="target-lock" style={{left:`${targetLeft}%`,top:`${targetTop}%`}}>T<div>TARGET</div></div>
-    <div className="camera-drone" style={{left:`${droneLeft}%`,top:`${droneTop}%`}}>◆</div>
-    <div className="camera-grid"></div>
-    <div className="camera-info"><span>ALT {Number(telemetry.y||0).toFixed(1)}m</span><span>SPD {Number(telemetry.speed||0).toFixed(1)}m/s</span><span>HDG {Number(telemetry.heading||0).toFixed(0)}°</span></div>
-    <div className="camera-bottom"><span>{telemetry.status}</span><span>D {Number(telemetry.distanceToTarget||0).toFixed(0)}m</span></div>
-   </div>
-  </section>
+  <main className="fc-layout">
+   <aside className="fc-left">
+    <div className="fc-panel-title">MISSION / EMERGENCY</div>
+    <button className="fc-mode manual" onClick={()=>setMode("MANUAL")}>◉ MANUAL<br/><small>REMOTE CONTROL</small></button>
+    <button className="fc-mode auto" onClick={()=>setMode("AUTOPILOT")}>◆ AUTOPILOT<br/><small>FOLLOW SAFE ROUTE</small></button>
+    <button className="fc-mode emergency" onClick={()=>setMode("EMERGENCY")}>! EMERGENCY AUTONOMOUS<br/><small>GPS-DENIED SENSOR MODE</small></button>
 
-  <section className="remote-card battery-panel">
-   <div><span>BATTERY</span><b>{Math.round(battery)}%</b></div>
-   <div className="battery-bar"><i style={{width:`${Math.max(0,Math.min(100,battery))}%`}}></i></div>
-   <div className="battery-meta"><span>GPS <b className={gpsLost?"danger":"ok"}>{gpsLost?"LOST":"LOCKED"}</b></span><span>SIGNAL <b className={connected?"ok":"danger"}>{connected?"STRONG":"OFFLINE"}</b></span><span>PHASE <b>{telemetry.phase||"IDLE"}</b></span></div>
-  </section>
-
-  <section className="remote-card target-card">
-   <div className="section-title"><h3>TARGET LOCATION</h3><span>{confirmed?"LOCKED":"SELECT"}</span></div>
-   <div className="target-map" onClick={e=>{const r=e.currentTarget.getBoundingClientRect();const x=Math.round(((e.clientX-r.left)/r.width-.5)*3000);const z=Math.round(((e.clientY-r.top)/r.height-.5)*3000);setTarget({x,y:60,z});setConfirmed(false);setLast("TARGET SELECTED")}}>
-    <div className="map-cross x"></div><div className="map-cross z"></div><div className="map-home">H</div>
-    <div className="map-drone" style={{left:`${droneLeft}%`,top:`${droneTop}%`}}>D</div>
-    <div className="map-target" style={{left:`${targetLeft}%`,top:`${targetTop}%`}}>T</div>
-    {!confirmed&&<div className="map-hint">TAP TO SET TARGET</div>}
-   </div>
-   <div className="target-coords">TARGET · X {Math.round(target.x)} · Z {Math.round(target.z)} · DIST {Number(telemetry.distanceToTarget||0).toFixed(0)}m</div>
-   <div className="target-row">
-    <button onClick={e=>{const r=e.currentTarget.previousSibling.getBoundingClientRect();void r;}} className="small-action">3 KM MAP</button>
-    <button className="confirm-target" onClick={selectTarget} disabled={confirmed}>{confirmed?"✓ TARGET LOCKED":"CONFIRM TARGET"}</button>
-   </div>
-  </section>
-
-  <section className="remote-card control-deck">
-   <div className="section-title"><h3>FLIGHT CONTROL</h3><span>TOUCH</span></div>
-   <div className="sticks-row">
-    <div className="stick-block"><div className="joystick" ref={joystickRef} onPointerDown={startJoystick} onPointerMove={updateJoystick} onPointerUp={endJoystick} onPointerCancel={endJoystick}>
-      <div className="joystick-ring"></div><div className="joystick-center" style={{transform:`translate(calc(-50% + ${joystick.x*36}px),calc(-50% + ${joystick.y*36}px))`}}></div>
-    </div><div className="stick-label">← LEFT &nbsp;&nbsp; FORWARD ↑ &nbsp;&nbsp; RIGHT →</div></div>
-    <div className="shortcut-grid">
-     <button onClick={()=>send("HOVER")}>HOVER</button><button onClick={()=>send("STOP")}>STOP</button>
-     <button onClick={()=>send("GPS_TOGGLE")}>GPS</button><button onClick={()=>send("AUTOPILOT")}>AUTO</button>
+    <div className="fc-action-grid">
+     <button className="takeoff" onClick={()=>send("START")}>▲<span>TAKE OFF</span></button>
+     <button className="land" onClick={()=>send("LAND")}>▼<span>LAND</span></button>
+     <button onClick={()=>send("HOVER")}>●<span>HOVER</span></button>
+     <button onClick={()=>send("STOP")}>■<span>STOP</span></button>
+     <button onClick={()=>send("GPS_TOGGLE")}>GPS<span>{gpsLost?"OFF":"ON"}</span></button>
+     <button onClick={()=>send("EMERGENCY")}>!<span>EMERGENCY</span></button>
     </div>
-   </div>
-  </section>
 
-  <section className="action-deck">
-   <button className="takeoff-button" onClick={()=>send("START")}>▲<span>TAKE OFF</span></button>
-   <button className="land-button" onClick={()=>send("LAND")}>▼<span>LAND</span></button>
-   <button className="auto-button" onClick={()=>send("AUTOPILOT")}>◆<span>AUTOPILOT</span></button>
-   <button className="emergency-button" onClick={()=>send("EMERGENCY")}>!</button>
-  </section>
+    <div className="fc-status">
+     <div>STATUS <b>{telemetry.status}</b></div>
+     <div>PHASE <b>{telemetry.phase}</b></div>
+     <div>MODE <b>{telemetry.mode}</b></div>
+     <div>GPS <b className={gpsLost?"danger":"ok"}>{gpsLost?"LOST":"CONNECTED"}</b></div>
+    </div>
+   </aside>
 
-  <div className={gpsLost?"gps-warning active":"gps-warning"}>⚠ {gpsLost?"GPS SIGNAL LOST — EMERGENCY AUTOPILOT READY":"GPS SIGNAL STABLE"} <b>{gpsLost?"EMERGENCY AUTO":"NORMAL"}</b></div>
-  <div className="last-command">LAST COMMAND <b>{last}</b></div>
-  <p className="hint">Flight Control → Socket.IO → Main Flight Controller → 3D Simulator</p>
- </div>
+   <section className="fc-center">
+    <div className="fc-live">
+     <div className="fc-section-head"><b>● LIVE DRONE MONITOR</b><span>{telemetry.mode}</span></div>
+     <div className="camera-screen">
+      <div className="camera-sky"></div><div className="camera-horizon"></div><div className="camera-ground"></div><div className="camera-grid"></div>
+      <div className="camera-reticle">+</div>
+      <div className="target-lock" style={{left:`${targetLeft}%`,top:`${targetTop}%`}}>T<div>TARGET</div></div>
+      <div className="camera-drone" style={{left:`${droneLeft}%`,top:`${droneTop}%`}}>◆</div>
+      <div className="camera-info"><span>ALT {Number(telemetry.y||0).toFixed(1)}m</span><span>SPD {Number(telemetry.speed||0).toFixed(1)}m/s</span><span>HDG {Number(telemetry.heading||0).toFixed(0)}°</span></div>
+      <div className="camera-bottom"><span>{telemetry.status}</span><span>D {Number(telemetry.distanceToTarget||0).toFixed(0)}m</span></div>
+     </div>
+    </div>
+
+    <div className="fc-target-panel">
+     <div className="fc-section-head"><b>SELECT TARGET LOCATION</b><span>{confirmed?"✓ ROUTE TARGET LOCKED":"CLICK MAP TO SELECT"}</span></div>
+     <div className="fc-target-map" onClick={selectTargetFromMap}>
+      <div className="map-cross x"></div><div className="map-cross z"></div>
+      <div className="map-home">H</div>
+      <div className="map-drone" style={{left:`${droneLeft}%`,top:`${droneTop}%`}}>D</div>
+      <div className="map-target" style={{left:`${targetLeft}%`,top:`${targetTop}%`}}>T</div>
+      {!confirmed&&<div className="map-hint">CLICK ANY AREA TO SET TARGET</div>}
+     </div>
+     <div className="target-readout">
+      <span>X <b>{Math.round(target.x)}</b></span><span>ALT <b>{Math.round(target.y)}</b></span><span>Z <b>{Math.round(target.z)}</b></span><span>DIST <b>{Number(telemetry.distanceToTarget||0).toFixed(0)} m</b></span>
+     </div>
+     <button className="confirm-target" onClick={confirmTarget} disabled={confirmed}>{confirmed?"✓ TARGET LOCKED — ROUTE SENT":"CONFIRM LOCATION & CALCULATE ROUTE"}</button>
+     <p className="route-note">After confirmation, the simulator receives the same X/Z target and its 3D A* navigation engine calculates a safe route around obstacles.</p>
+    </div>
+   </section>
+
+   <aside className="fc-right">
+    <div className="fc-panel-title">FLIGHT STICK</div>
+    <div className="joystick-wrap">
+     <div className="joystick" ref={joystickRef} onPointerDown={startJoystick} onPointerMove={updateJoystick} onPointerUp={endJoystick} onPointerCancel={endJoystick}>
+      <div className="joystick-ring"></div><div className="joystick-ring ring2"></div>
+      <div className="joystick-center" style={{transform:`translate(calc(-50% + ${joystick.x*62}px),calc(-50% + ${joystick.y*62}px))`}}></div>
+     </div>
+    </div>
+    <div className="joystick-label">FORWARD ↑ &nbsp; / &nbsp; BACK ↓<br/>LEFT ← &nbsp; / &nbsp; RIGHT →</div>
+
+    <div className="keyboard-card">
+     <b>PC KEYBOARD</b>
+     <div className="key-row"><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd></div>
+     <div className="key-row"><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
+     <p>W/S MOVE FORWARD/BACK<br/>A/D MOVE LEFT/RIGHT<br/>Q/E YAW · ↑/↓ ALTITUDE</p>
+    </div>
+
+    <div className="telemetry-card">
+     <div><span>BATTERY</span><b>{Math.round(battery)}%</b></div>
+     <div className="battery-bar"><i style={{width:`${Math.max(0,Math.min(100,battery))}%`}}></i></div>
+     <div className="telemetry-values"><span>ALT<b>{Number(telemetry.y||0).toFixed(1)}m</b></span><span>SPEED<b>{Number(telemetry.speed||0).toFixed(1)}m/s</b></span><span>SENSOR<b>{Number(telemetry.sensorDistance||0).toFixed(1)}m</b></span></div>
+    </div>
+   </aside>
+  </main>
+ </div>;
 }
