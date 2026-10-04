@@ -16,14 +16,14 @@ export default function PhoneController(){
   const s=io(SOCKET_URL);socketRef.current=s;
   s.on("connect",()=>setConnected(true));
   s.on("disconnect",()=>setConnected(false));
-  s.on("phone-telemetry",d=>{if(!d)return;setTelemetry(d);if(d.target)setTarget(d.target)});
+  s.on("phone-telemetry",d=>{if(!d)return;setTelemetry(d);if(d.target){setTarget(d.target);if(d.status&&d.status!=="READY")setConfirmed(true)}});
   return()=>s.disconnect();
  },[]);
 
  function send(command){setLast(command);socketRef.current?.emit("phone-control",command)}
 
  function selectTarget(){
-  const safe={x:Number(target.x)||0,y:Math.max(2,Number(target.y)||12),z:Number(target.z)||0};
+  const safe={x:Number(target.x)||0,y:Math.max(5,Number(target.y)||30),z:Number(target.z)||0};
   setTarget(safe);setConfirmed(true);send("TARGET:"+JSON.stringify(safe));
  }
 
