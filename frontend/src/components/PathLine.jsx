@@ -1,0 +1,2 @@
+import {useMemo} from "react"; import * as THREE from "three";
+export default function PathLine({path}){const points=useMemo(()=>path.map(p=>new THREE.Vector3(p.x,p.y+.3,p.z)),[path]);const geometry=useMemo(()=>{const g=new THREE.BufferGeometry();g.setFromPoints(points);return g},[points]);if(points.length<2)return null;return <line geometry={geometry}><lineBasicMaterial/></line>}
