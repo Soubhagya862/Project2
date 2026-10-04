@@ -292,6 +292,7 @@ function App(){
   socketRef.current=s;
   s.on("connect",()=>setPhoneConnected(true));
   s.on("disconnect",()=>setPhoneConnected(false));
+  s.on("drone-command",cmd=>commandHandlerRef.current?.(cmd));
   s.on("phone-control",cmd=>commandHandlerRef.current?.(cmd));
   return()=>s.disconnect();
  },[]);
