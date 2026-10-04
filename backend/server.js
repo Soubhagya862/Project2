@@ -19,8 +19,11 @@ const io=new SocketIOServer(httpServer,{
 
 io.on("connection",socket=>{
   socket.emit("server-ready",{service:"NAVIGATE-X",connectedAt:Date.now()});
+  socket.on("drone-command",data=>{
+    if(typeof data==="string") io.emit("drone-command",data);
+  });
   socket.on("phone-control",data=>{
-    if(typeof data==="string") socket.broadcast.emit("phone-control",data);
+    if(typeof data==="string") io.emit("drone-command",data);
   });
   socket.on("phone-telemetry",data=>{
     socket.broadcast.emit("phone-telemetry",data);
