@@ -30,7 +30,7 @@ const COMMAND_API = (() => {
   return `${window.location.protocol}//${window.location.hostname}:5000/api`;
 })();
 
-const IS_BRIDGE = window.location.pathname === "/phone";
+const IS_BRIDGE = window.location.pathname.replace(/\/+$/, "") === "/phone";
 
 const DEFAULT_TARGET = {
   x: 700,
