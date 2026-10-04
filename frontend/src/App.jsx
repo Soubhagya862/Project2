@@ -247,13 +247,6 @@ function App(){
   },[status]);
 
   useEffect(()=>{
-    const timer=setInterval(()=>{
-      setObstacles(current=>current.map((o,i)=>o.type==="DYNAMIC"?{...o,position:{...o.position,x:o.position.x+Math.sin(Date.now()/900+i)*.35,z:o.position.z+Math.cos(Date.now()/1100+i)*.35}}:o));
-    },120);
-    return()=>clearInterval(timer);
-  },[]);
-
-  useEffect(()=>{
     if(!mission?._id)return;
     const timer=setInterval(()=>{fetch(API+"/telemetry",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({missionId:mission._id,position:pos,altitude:pos.y,speed,heading,gpsStatus:gps?"CONNECTED":"DENIED",obstacleDetected:sensor,sensorDistance})}).catch(()=>{});socketRef.current?.emit("phone-telemetry",{x:pos.x,y:pos.y,z:pos.z,speed,heading,gps:gps?"CONNECTED":"DENIED",status,phase,target});},500);
     return()=>clearInterval(timer);
