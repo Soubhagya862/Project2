@@ -4,11 +4,11 @@ import "./phone.css";
 
 function getLanBackendUrl(){
  const configured=import.meta.env.VITE_SOCKET_URL?.trim();
- if(configured)return configured.replace(/\/$/,"");
+ if(configured)return configured.endsWith("/")?configured.slice(0,-1):configured;
  return `http://${window.location.hostname}:5000`;
 }
 const SOCKET_URL=getLanBackendUrl();
-const COMMAND_API=(()=>{const v=import.meta.env.VITE_API_URL?.trim();if(v&&!/localhost|127\.0\.0\.1/i.test(v))return v.replace(/\/$/,"");return `${window.location.protocol}//${window.location.hostname}:5000/api`;})();
+const COMMAND_API=(()=>{const v=import.meta.env.VITE_API_URL?.trim();if(v&&!v.includes("localhost")&&!v.includes("127.0.0.1"))return v.endsWith("/")?v.slice(0,-1):v;return `${window.location.protocol}//${window.location.hostname}:5000/api`;})();
 
 const DEFAULT_TARGET={x:700,y:60,z:450};
 const KEY_COMMANDS={w:"UP",s:"DOWN",a:"LEFT",d:"RIGHT",q:"YAW_LEFT",e:"YAW_RIGHT","ArrowUp":"ASCEND","ArrowDown":"DESCEND"};
