@@ -31,14 +31,16 @@ function rayBox(origin,dir,o,maxDistance){
   return tMin>=0&&tMin<=maxDistance?tMin:null;
 }
 
-export default function DroneSensors({position,obstacles=[],range=12,onDetection}){
+export default function DroneSensors({position,heading=0,obstacles=[],range=12,onDetection}){
   const [hits,setHits]=useState({});
   const lastReport=useRef(0);
   const scan=useRef({});
   
   useFrame((state)=>{
     const next={};
-    for(const sensor of DIRECTIONS){
+    const a=heading*Math.PI/180,cos=Math.cos(a),sin=Math.sin(a);
+    const worldDirections=DIRECTIONS.map(sensor=>({...sensor,v:{x:sensor.v.x*cos-sensor.v.z*sin,y:sensor.v.y,z:sensor.v.x*sin+sensor.v.z*cos}}));
+    for(const sensor of worldDirections){
       let nearest=range;
       for(const obstacle of obstacles){
         const hit=rayBox(position,sensor.v,obstacle,range);
@@ -58,12 +60,12 @@ export default function DroneSensors({position,obstacles=[],range=12,onDetection
 
   return <group position={[position.x,position.y,position.z]}>
     {DIRECTIONS.map((line,i)=>{
-      const sensor=DIRECTIONS[i];
+      const sensor=DIRECTIONS[i],a=heading*Math.PI/180,cos=Math.cos(a),sin=Math.sin(a),world={x:sensor.v.x*cos-sensor.v.z*sin,y:sensor.v.y,z:sensor.v.x*sin+sensor.v.z*cos};
       const hit=hits[sensor.name]??range;
       const length=Math.max(0.5,Math.min(range,hit));
       return <Line
         key={sensor.name}
-        points={[[0,0,0],[sensor.v.x*length,sensor.v.y*length,sensor.v.z*length]]}
+        points={[[0,0,0],[world.x*length,world.y*length,world.z*length]]}
         lineWidth={hit<4?4:1.5}
       />;
     })}
