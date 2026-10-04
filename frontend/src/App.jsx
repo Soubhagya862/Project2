@@ -9,7 +9,7 @@ import DroneSensors from "./components/DroneSensors";
 
 const API=import.meta.env.VITE_API_URL||"http://localhost:5000/api";
 const SOCKET_URL=import.meta.env.VITE_SOCKET_URL||"http://localhost:5000";
-const HOME={x:0,y:30,z:0};
+const HOME={x:0,y:2,z:0};
 const WORLD={minX:-1500,maxX:1500,minY:5,maxY:300,minZ:-1500,maxZ:1500};
 
 const BASE_OBSTACLES=[
@@ -81,14 +81,14 @@ function ObstacleView({o}){
  return <Debris o={o} dynamic={o.type==="DYNAMIC"}/>;
 }
 
-function DroneModel({position,heading}){
+function DroneModel({position,heading,flying}){
  const ref=useRef();
  const propRefs=useRef([]);
  useFrame((state,delta)=>{
    if(!ref.current)return;
    const a=heading*Math.PI/180;
    ref.current.rotation.y=THREE.MathUtils.lerp(ref.current.rotation.y,-a,delta*8);
-   propRefs.current.forEach(r=>{if(r)r.rotation.y+=delta*32;});
+   if(flying) propRefs.current.forEach(r=>{if(r)r.rotation.y+=delta*32;});
  });
  return <group ref={ref} position={[position.x,position.y,position.z]}>
    <mesh castShadow><boxGeometry args={[3.8,.7,2.6]}/><meshStandardMaterial color="#242b31" metalness={.85} roughness={.22}/></mesh>
@@ -134,8 +134,10 @@ function App(){
  const [obstacles,setObstacles]=useState(BASE_OBSTACLES),[gps,setGps]=useState(true),[mode,setMode]=useState("MANUAL");
  const [status,setStatus]=useState("READY"),[phase,setPhase]=useState("IDLE"),[speed,setSpeed]=useState(0),[heading,setHeading]=useState(0);
  const [mission,setMission]=useState(null),[sensor,setSensor]=useState(false),[sensorDistance,setSensorDistance]=useState(14),[message,setMessage]=useState("Choose a destination to begin");
- const [phoneConnected,setPhoneConnected]=useState(false),[phoneCommand,setPhoneCommand]=useState("STOP"),[destinationChosen,setDestinationChosen]=useState(false),[landing,setLanding]=useState(false);
+ const [phoneConnected,setPhoneConnected]=useState(false),[phoneCommand,setPhoneCommand]=useState("STOP"),[destinationChosen,setDestinationChosen]=useState(false),[landing,setLanding]=useState(false),[takeoffCountdown,setTakeoffCountdown]=useState(null);
  pathRef.current=path; missionRef.current=mission;
+ const flying=speed>0&&pos.y>2.5;
+ const speak=text=>{try{window.speechSynthesis?.cancel();const u=new SpeechSynthesisUtterance(text);u.rate=.95;window.speechSynthesis?.speak(u)}catch{}};
 
  const patchMission=async data=>{if(!missionRef.current?._id)return;try{await fetch(API+`/missions/${missionRef.current._id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)})}catch{}};
 
@@ -171,6 +173,7 @@ function App(){
  }
 
  function manualMove(cmd){
+   if(pos.y<=2.5){setMessage("Drone is on the ground — use TAKEOFF first");return}
    setMode("MANUAL");setStatus("MANUAL FLIGHT");setPhase("USER CONTROL");setSpeed(8);
    const step=12, map={UP:[0,-step],DOWN:[0,step],LEFT:[-step,0],RIGHT:[step,0],UP_LEFT:[-step,-step],UP_RIGHT:[step,-step],DOWN_LEFT:[-step,step],DOWN_RIGHT:[step,step]};
    const [dx,dz]=map[cmd]||[0,0]; if(!map[cmd])return;
@@ -180,17 +183,25 @@ function App(){
 
  async function startAutopilot(){
    if(!destinationChosen){setMessage("CHOOSE DESTINATION before takeoff");return}
-   const r=path.length?path:await calculate();
-   if(!r.length){setMessage("No safe route — calculate again");return}
-   returning.current=false;setLanding(false);setMode(gps?"AUTOPILOT":"EMERGENCY AUTOPILOT");setStatus(gps?"AUTOPILOT ACTIVE":"EMERGENCY AUTOPILOT");setPhase(gps?"TAKEOFF → TARGET":"GPS LOST → SENSOR NAVIGATION");setSpeed(50);setMessage(gps?"Autonomous flight started":"GPS lost — emergency autopilot engaged");await patchMission({status:gps?"AUTOPILOT":"EMERGENCY AUTOPILOT",phase:gps?"TAKEOFF → TARGET":"GPS LOST → SENSOR NAVIGATION"});
+   if(takeoffCountdown!==null)return;
+   const r=path.length?path:await calculate(); if(!r.length)return;
+   for(let i=5;i>0;i--){setTakeoffCountdown(i);await new Promise(res=>setTimeout(res,1000))}
+   setTakeoffCountdown(null);setPos(p=>({...p,y:30}));setStatus("READY FOR TAKEOFF");setPhase("TAKEOFF COMPLETE");setSpeed(0);
+   speak("Your drone is ready to take off");await new Promise(res=>setTimeout(res,700));
+   returning.current=false;setLanding(false);setMode(gps?"AUTOPILOT":"EMERGENCY AUTOPILOT");setStatus(gps?"AUTOPILOT ACTIVE":"EMERGENCY AUTOPILOT");setPhase(gps?"GOING TOWARDS TARGET":"GPS LOST — SENSOR NAVIGATION");setSpeed(50);setMessage("Your drone is going towards the location");speak("Your drone is going towards the location");await patchMission({status:gps?"AUTOPILOT":"EMERGENCY AUTOPILOT",phase:gps?"GOING TOWARDS TARGET":"GPS LOST — SENSOR NAVIGATION"});
  }
 
  async function stopFlight(){setMode("MANUAL");setStatus("STOPPED");setPhase("MANUAL");setSpeed(0);setLanding(false);await patchMission({status:"STOPPED",phase:"MANUAL"})}
 
  async function emergencyAutopilot(){
    if(!destinationChosen){setMessage("Choose destination before emergency test");return}
-   setGps(false);setMode("EMERGENCY AUTOPILOT");setStatus("EMERGENCY AUTOPILOT");setPhase("GPS DENIED — ONBOARD SENSORS");setMessage("GPS lost: switching automatically to emergency navigation");
-   const r=await calculate(pos,target);if(r.length){setPath(r);idx.current=0;setSpeed(50);await patchMission({gpsStatus:"DENIED",status:"EMERGENCY AUTOPILOT",phase:"GPS DENIED — ONBOARD SENSORS",route:r})}
+   if(takeoffCountdown!==null)return;
+   setGps(false);setMode("EMERGENCY AUTOPILOT");
+   const r=await calculate(pos,target);if(!r.length)return;
+   for(let i=5;i>0;i--){setTakeoffCountdown(i);await new Promise(res=>setTimeout(res,1000))}
+   setTakeoffCountdown(null);setPos(p=>({...p,y:30}));setStatus("READY FOR TAKEOFF");setPhase("TAKEOFF COMPLETE");setSpeed(0);
+   speak("Your drone is ready to take off");await new Promise(res=>setTimeout(res,700));
+   setStatus("EMERGENCY AUTOPILOT");setPhase("GPS DENIED — SENSOR NAVIGATION");setSpeed(50);setMessage("Your drone is going towards the location");speak("Your drone is going towards the location");await patchMission({gpsStatus:"DENIED",status:"EMERGENCY AUTOPILOT",phase:"GPS DENIED — SENSOR NAVIGATION",route:r});
  }
 
  async function toggleGps(){
@@ -278,7 +289,7 @@ function App(){
      <color attach="background" args={["#87a9c1"]}/><fog attach="fog" args={["#87a9c1",100,210]}/>
      <ambientLight intensity={1.5}/><directionalLight castShadow position={[30,80,20]} intensity={3}/><hemisphereLight intensity={1.2} groundColor="#263b2a" skyColor="#b8d7ed"/>
      <Terrain/>
-     {obstacles.map(o=><ObstacleView key={o.id||JSON.stringify(o.position)} o={o}/>)}<DroneModel position={pos} heading={heading}/>
+     {obstacles.map(o=><ObstacleView key={o.id||JSON.stringify(o.position)} o={o}/>)}<DroneModel position={pos} heading={heading} flying={flying}/>
      <DroneSensors position={pos} obstacles={obstacles} range={18} onDetection={({detected,distance:front})=>{setSensor(detected);setSensorDistance(front);if(detected&&front<4&&["AUTOPILOT","EMERGENCY AUTOPILOT"].includes(mode))replan()}}/>
      <Route path={path} returning={returning.current}/><TargetMarker target={target}/><TargetMarker target={HOME} home/>
      <DroneCamera position={pos} heading={heading}/>
@@ -291,12 +302,12 @@ function App(){
    <aside className="control-panel">
     <div className="panel-heading"><span>FLIGHT CONTROLLER</span><small>{phoneConnected?"REMOTE LINK ACTIVE":"LOCAL CONTROL"}</small></div>
     <div className="mode-tabs"><button className={mode==="MANUAL"?"active":""} onClick={()=>{setMode("MANUAL");setStatus("MANUAL READY");setPhase("USER CONTROL");setSpeed(0)}}>MANUAL</button><button className={mode==="AUTOPILOT"?"active":""} onClick={startAutopilot}>AUTOPILOT</button><button className={mode==="EMERGENCY AUTOPILOT"?"active danger-tab":""} onClick={emergencyAutopilot}>EMERGENCY</button></div>
-    <div className="target-box"><div className="section-label">1 · DESTINATION · 3 KM LIVE MAP</div><div className="mission-map" onClick={e=>{const r=e.currentTarget.getBoundingClientRect();const x=Math.round(((e.clientX-r.left)/r.width-.5)*3000);const z=Math.round(((e.clientY-r.top)/r.height-.5)*3000);setTarget({x,y:60,z})}}><div className="map-grid"></div><div className="map-home">H</div><div className="map-target" style={{left:`${50+target.x/30}%`,top:`${50+target.z/30}%`}}>◆</div><div className="map-drone" style={{left:`${50+pos.x/30}%`,top:`${50+pos.z/30}%`}}>D</div></div><div className="map-readout">Target: {Math.round(target.x)} m / {Math.round(target.z)} m</div><button className={destinationChosen?"selected-button":"primary-wide"} onClick={()=>chooseTarget(target)}>{destinationChosen?"✓ DESTINATION CONFIRMED":"✓ CONFIRM DESTINATION"}</button></div>
+    <div className="target-box"><div className="section-label">1 · DESTINATION / LIVE TRACKER</div>{destinationChosen?<div className="mission-radar"><div className="radar-sweep"></div><div className="radar-ring ring1"></div><div className="radar-ring ring2"></div><div className="radar-cross cross-x"></div><div className="radar-cross cross-z"></div><div className="radar-point radar-home-point" style={{left:"50%",top:"50%"}}>H</div><div className="radar-point radar-drone-point" style={{left:`${50+pos.x/30}%`,top:`${50+pos.z/30}%`}}>D</div><div className="radar-point radar-target-point" style={{left:`${50+target.x/30}%`,top:`${50+target.z/30}%`}}>T</div><div className="radar-label">LIVE 3 KM × 3 KM TRACKER</div></div>:<div className="mission-map" onClick={e=>{const r=e.currentTarget.getBoundingClientRect();const x=Math.round(((e.clientX-r.left)/r.width-.5)*3000);const z=Math.round(((e.clientY-r.top)/r.height-.5)*3000);setTarget({x,y:60,z})}}><div className="map-home">H</div><div className="map-target" style={{left:`${50+target.x/30}%`,top:`${50+target.z/30}%`}}>◆</div><div className="map-drone" style={{left:`${50+pos.x/30}%`,top:`${50+pos.z/30}%`}}>D</div></div>}<div className="map-readout">{destinationChosen?"D DRONE · T TARGET · H HOME":"Target: "+Math.round(target.x)+" m / "+Math.round(target.z)+" m"}</div>{!destinationChosen&&<button className="primary-wide" onClick={()=>chooseTarget(target)}>✓ CONFIRM DESTINATION</button>}</div>
     <div className="button-grid"><button onClick={()=>calculate()}>2 · CALCULATE 3D A*</button><button onClick={createMission}>3 · CREATE MISSION</button><button className="primary" onClick={startAutopilot}>4 · TAKEOFF / START</button><button onClick={stopFlight}>STOP / LAND</button><button className="warning" onClick={addLiveObstacle}>＋ LIVE OBSTACLE</button><button className="warning" onClick={toggleGps}>{gps?"GPS DISCONNECT":"GPS RESTORE"}</button></div>
     <div className="manual-box"><div className="section-label">MANUAL FLIGHT CONTROL</div><div className="dpad"><span></span><button onClick={()=>manualMove("UP")}>↑</button><span></span><button onClick={()=>manualMove("LEFT")}>←</button><button onClick={()=>stopFlight()}>■</button><button onClick={()=>manualMove("RIGHT")}>→</button><span></span><button onClick={()=>manualMove("DOWN")}>↓</button><span></span></div><p className="hint">Manual mode: user controls the drone. Autopilot mode: route control. Emergency mode: GPS-denied sensor navigation.</p></div>
     <MissionMonitor status={status} phase={phase} gps={gps} waypoints={path.length} missionId={mission?._id} phoneCommand={phoneCommand} phoneConnected={phoneConnected} sensor={sensor}/>
-    <TelemetryPanel data={{...pos,altitude:pos.y,speed,distance:dist,heading,sensorDistance}}/>
-    <div className="message">{message}</div>
+    
+    {takeoffCountdown!==null&&<div className="takeoff-overlay"><div className="takeoff-title">DRONE TAKEOFF</div><div className="takeoff-number">{takeoffCountdown}</div><div className="takeoff-sub">GETTING READY...</div></div>}<div className="message">{message}</div>
    </aside>
   </main>
  </div>;
