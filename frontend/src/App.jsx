@@ -123,7 +123,7 @@ function TargetMarker({target,home=false}){return <group position={[target.x,tar
  </group>;}
 
 function App(){
- const socketRef=useRef(null),idx=useRef(0),pathRef=useRef([]),missionRef=useRef(null),replanLock=useRef(false),returning=useRef(false),manualAnnounced=useRef(false),manualMotionRef=useRef({vx:0,vy:0,vz:0,yaw:0,until:0});
+ const socketRef=useRef(null),idx=useRef(0),pathRef=useRef([]),missionRef=useRef(null),replanLock=useRef(false),returning=useRef(false),manualAnnounced=useRef(false),manualMotionRef=useRef({vx:0,vy:0,vz:0,yaw:0,until:0}),lastCommandIdRef=useRef(0),commandBusyRef=useRef(false);
  const [pos,setPos]=useState({...HOME}),[target,setTarget]=useState({x:700,y:60,z:450}),[path,setPath]=useState([]);
  const [obstacles,setObstacles]=useState(BASE_OBSTACLES),[gps,setGps]=useState(true),[mode,setMode]=useState("MANUAL");
  const [status,setStatus]=useState("READY"),[phase,setPhase]=useState("IDLE"),[speed,setSpeed]=useState(0),[heading,setHeading]=useState(0);
@@ -168,12 +168,15 @@ function App(){
    if(yaw)setPhase(cmd==="YAW_LEFT"?"YAW LEFT":"YAW RIGHT");else if(vy>0)setPhase("ASCENDING");else if(vy<0)setPhase("DESCENDING");
  }
  async function startAutopilot(){
+   if(commandBusyRef.current)return;
+   commandBusyRef.current=true;
    if(takeoffCountdown!==null)return;
    if(destinationChosen&&!path.length){const r=await calculate();if(!r.length)return}
    setTakeoffCountdown(null);setLanding(false);setStatus("TAKEOFF");setPhase("TAKEOFF COMPLETE");
    setMessage("Drone is ready to take up");speak("Drone is ready to take up");setPos(p=>({...p,y:30}));
    setStatus("AIRBORNE");setPhase("MANUAL FLIGHT READY");setMode("MANUAL");setSpeed(0);
    manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,until:0};manualAnnounced.current=false;setMessage("Drone is airborne — use phone controller to fly");
+   commandBusyRef.current=false;
  }
  async function stopFlight(){
    manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,until:0};setLanding(false);setMode("MANUAL");setStatus("LANDING");setPhase("REMOTE LAND COMMAND");setSpeed(3);
@@ -210,8 +213,8 @@ function App(){
    if(cmd.startsWith("TARGET:")){try{const t=JSON.parse(cmd.slice(7));await chooseTarget(t);setRemoteControl("TARGET")}catch{setMessage("Invalid remote target")}return}
    manualMove(cmd);
  };
- useEffect(()=>{const s=io(SOCKET_URL,{transports:["websocket","polling"],reconnection:true});socketRef.current=s;s.on("connect",()=>setPhoneConnected(true));s.on("disconnect",()=>setPhoneConnected(false));return()=>s.disconnect()},[]);
- useEffect(()=>{let cancelled=false,lastCommandId=0;const poll=setInterval(async()=>{if(cancelled)return;try{const r=await fetch(COMMAND_API+"/flight-command?client=simulator",{cache:"no-store"});if(!r.ok)return;const d=await r.json();if(d?.id&&d.id>lastCommandId){lastCommandId=d.id;commandHandlerRef.current?.(d.command)}}catch{}},100);return()=>{cancelled=true;clearInterval(poll)}},[]);
+ useEffect(()=>{const s=io(SOCKET_URL,{transports:["websocket","polling"],reconnection:true});socketRef.current=s;s.on("connect",()=>{setPhoneConnected(true);s.emit("register-client",{role:"simulator"})});s.on("disconnect",()=>setPhoneConnected(false));s.on("flight-control-command",payload=>{const id=typeof payload==="object"?Number(payload.id||0):0;const command=typeof payload==="string"?payload:payload?.command;if(id&&id<=lastCommandIdRef.current)return;if(id)lastCommandIdRef.current=id;if(command)commandHandlerRef.current?.(command)});return()=>s.disconnect()},[]);
+ useEffect(()=>{let cancelled=false;const poll=setInterval(async()=>{if(cancelled)return;try{const r=await fetch(COMMAND_API+"/flight-command?client=simulator",{cache:"no-store"});if(!r.ok)return;const d=await r.json();if(d?.id&&d.id>lastCommandIdRef.current){lastCommandIdRef.current=d.id;commandHandlerRef.current?.(d.command)}}catch{}},100);return()=>{cancelled=true;clearInterval(poll)}},[]);
  useEffect(()=>{let raf=0,lastTime=performance.now();const tick=now=>{const dt=Math.min((now-lastTime)/1000,.033);lastTime=now;const m=manualMotionRef.current;if(mode==="MANUAL"&&now<m.until){setPos(p=>({x:THREE.MathUtils.clamp(p.x+m.vx*dt,WORLD.minX,WORLD.maxX),y:THREE.MathUtils.clamp(p.y+m.vy*dt,2,WORLD.maxY),z:THREE.MathUtils.clamp(p.z+m.vz*dt,WORLD.minZ,WORLD.maxZ)}));if(m.yaw)setHeading(h=>h+m.yaw*dt)}else if(mode==="MANUAL"&&m.until!==0){manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,until:0};setSpeed(0);setPhase("REMOTE CONTROL IDLE")}raf=requestAnimationFrame(tick)};raf=requestAnimationFrame(tick);return()=>cancelAnimationFrame(raf)},[mode]);
  useEffect(()=>{if(!["AUTOPILOT","EMERGENCY AUTOPILOT"].includes(mode)||!path.length)return;let alive=true;const timer=setInterval(async()=>{if(!alive)return;const n=path[idx.current];if(!n){clearInterval(timer);setSpeed(0);setLanding(true);setStatus(returning.current?"HOME ARRIVAL":"TARGET REACHED");setPhase("LANDING");setMessage(returning.current?"Returning home — landing":"Target reached — precision landing");return}if(isBlocked(n)){await replan();return}const d=distance(pos,n),step=Math.min(3.5,d);if(d<.05){idx.current++;return}const ratio=step/d,next={x:pos.x+(n.x-pos.x)*ratio,y:pos.y+(n.y-pos.y)*ratio,z:pos.z+(n.z-pos.z)*ratio};setHeading(Math.atan2(n.z-pos.z,n.x-pos.x)*180/Math.PI);setPos(next);setSpeed(10);idx.current=distance(next,n)<.15?idx.current+1:idx.current},70);return()=>{alive=false;clearInterval(timer)}},[mode,path,pos,obstacles]);
  useEffect(()=>{if(!landing)return;const timer=setTimeout(async()=>{setPos(p=>({...p,y:returning.current?HOME.y:target.y}));setSpeed(0);setStatus(returning.current?"MISSION COMPLETE":"LANDED");setPhase(returning.current?"HOME LANDED":"WAITING 10s");await patchMission({status:returning.current?"MISSION COMPLETE":"LANDED",phase:returning.current?"HOME LANDED":"WAITING 10s"});if(!returning.current){await new Promise(r=>setTimeout(r,10000));returning.current=true;const r=await calculate({...pos,y:target.y},HOME);if(!r.length){setStatus("RETURN ROUTE BLOCKED");setPhase("RETURN FAILED");return}setPath(r);idx.current=0;setLanding(false);setMode(gps?"AUTOPILOT":"EMERGENCY AUTOPILOT");setStatus("RETURNING HOME");setPhase("AUTONOMOUS RETURN TO HOME");setSpeed(10);setMessage("10-second landing wait complete — returning home");await patchMission({status:"RETURNING HOME",phase:"AUTONOMOUS RETURN TO HOME",route:r})}},1200);return()=>clearTimeout(timer)},[landing]);
