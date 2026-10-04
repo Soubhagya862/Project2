@@ -28,12 +28,12 @@ const cityBuildings=Array.from({length:180},(_,i)=>({
   h:35+(i%12)*22
 })).filter(b=>Math.hypot(b.x,b.z)>120);
 
-function DroneModel({p,heading}){
+function DroneModel({p,heading,flying}){
   const group=useRef();
   const rotors=useRef([]);
   useFrame((_,d)=>{
     if(group.current)group.current.rotation.y=THREE.MathUtils.lerp(group.current.rotation.y,-heading*Math.PI/180,d*8);
-    rotors.current.forEach(r=>{if(r)r.rotation.y+=d*28});
+    if(flying)rotors.current.forEach(r=>{if(r)r.rotation.y+=d*28});
   });
   const arms=[[-2.7,0,-1.8],[2.7,0,-1.8],[-2.7,0,1.8],[2.7,0,1.8]];
   return <group ref={group} position={[p.x,p.y,p.z]} scale={[1.15,1.15,1.15]}>
