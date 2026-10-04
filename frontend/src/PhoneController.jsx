@@ -8,6 +8,7 @@ function getLanBackendUrl(){
  return `http://${window.location.hostname}:5000`;
 }
 const SOCKET_URL=getLanBackendUrl();
+const COMMAND_API=(import.meta.env.VITE_API_URL||`${window.location.protocol}//${window.location.hostname}:5000/api`).replace(/\/$/,"");
 
 const DEFAULT_TARGET={x:700,y:60,z:450};
 const KEY_COMMANDS={w:"UP",s:"DOWN",a:"LEFT",d:"RIGHT",q:"YAW_LEFT",e:"YAW_RIGHT","ArrowUp":"ASCEND","ArrowDown":"DESCEND"};
