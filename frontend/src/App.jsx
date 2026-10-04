@@ -14,7 +14,7 @@ function getLanBackendUrl(){
   return `http://${host}:5000`;
 }
 const SOCKET_URL=getLanBackendUrl();
-const COMMAND_API=(import.meta.env.VITE_API_URL||`${window.location.protocol}//${window.location.hostname}:5000/api`).replace(/\/$/,"");
+const COMMAND_API=(()=>{const v=import.meta.env.VITE_API_URL?.trim();if(v&&!/localhost|127\\.0\\.0\\.1/i.test(v))return v.replace(/\\/$/,"");return `${window.location.protocol}//${window.location.hostname}:5000/api`;})();
 
 const HOME={x:0,y:2,z:0};
 const WORLD={minX:-1500,maxX:1500,minY:5,maxY:300,minZ:-1500,maxZ:1500};
