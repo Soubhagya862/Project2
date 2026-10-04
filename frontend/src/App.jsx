@@ -276,11 +276,18 @@ function App(){
  }
 
  const commandHandlerRef=useRef(null);
+ const keyboardRef=useRef(new Set());
  commandHandlerRef.current=async cmd=>{
    setPhoneCommand(cmd);
    setRemoteControl(cmd);
    if(cmd==="START")return startAutopilot();
-   if(cmd==="STOP")return stopFlight();
+   if(cmd==="STOP"||cmd==="HOVER"){
+     manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,until:0};
+     setSpeed(0);
+     setPhase("HOVER");
+     setStatus(pos.y>2.5?"AIRBORNE":"LANDED");
+     return;
+   }
    if(cmd==="LAND")return stopFlight();
    if(cmd==="EMERGENCY")return emergencyAutopilot();
    if(cmd==="GPS_TOGGLE")return toggleGps();
@@ -291,6 +298,32 @@ function App(){
    }
    manualMove(cmd);
  };
+
+ useEffect(()=>{
+  const down=e=>{
+    const key=e.key.toLowerCase();
+    if(!["w","a","s","d","q","e"].includes(key))return;
+    e.preventDefault();
+    if(keyboardRef.current.has(key))return;
+    keyboardRef.current.add(key);
+    const command={w:"UP",s:"DOWN",a:"LEFT",d:"RIGHT",q:"YAW_LEFT",e:"YAW_RIGHT"}[key];
+    commandHandlerRef.current?.(command);
+  };
+  const up=e=>{
+    const key=e.key.toLowerCase();
+    if(!["w","a","s","d","q","e"].includes(key))return;
+    e.preventDefault();
+    keyboardRef.current.delete(key);
+    if(keyboardRef.current.size===0)commandHandlerRef.current?.("HOVER");
+  };
+  window.addEventListener("keydown",down);
+  window.addEventListener("keyup",up);
+  return()=>{
+    window.removeEventListener("keydown",down);
+    window.removeEventListener("keyup",up);
+    keyboardRef.current.clear();
+  };
+ },[]);
 
  useEffect(()=>{
   const s=io(SOCKET_URL,{transports:["websocket","polling"],reconnection:true});
