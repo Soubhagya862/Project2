@@ -179,7 +179,12 @@ function ControlButton({ children, onDown, onUp }) {
 }
 
 export default function App() {
-  const [position, setPosition] = useState(HOME);
+  // Drone starts exactly on the HOME launch point / stand.
+  const [position, setPosition] = useState({
+    x: START_PAD.x,
+    y: HOME.y,
+    z: START_PAD.z
+  });
   const [mode, setMode] = useState("MANUAL");
   const [status, setStatus] = useState("READY");
   const [phase, setPhase] = useState("ON GROUND");
