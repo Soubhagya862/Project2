@@ -204,7 +204,7 @@ function App(){
   };
 
   function manualMove(cmd){
-    setAuto(false);setManualMode(true);setSpeed(6);
+    setAuto(false);setSpeed(6);
     const step=1.8, map={UP:[0,step],DOWN:[0,-step],LEFT:[-step,0],RIGHT:[step,0],UP_LEFT:[-step,step],UP_RIGHT:[step,step],DOWN_LEFT:[-step,-step],DOWN_RIGHT:[step,-step]};
     const [dx,dz]=map[cmd]||[0,0];
     setHeading(Math.atan2(dz,dx)*180/Math.PI);
@@ -270,8 +270,7 @@ function App(){
           <DroneSensors position={pos} obstacles={obstacles} range={14} onDetection={({detected,distance:front})=>{setSensor(detected);setSensorDistance(front);if(detected&&front<3.5&&auto)replan()}}/>
           <Route path={path}/>
           <TargetMarker target={target}/>
-          <DroneCamera position={pos} heading={heading} enabled={viewMode==="FPV"}/>
-          {viewMode!=="FPV"&&<OrbitControls enableDamping dampingFactor={.08}/>}
+          <DroneCamera position={pos} heading={heading}/>
         </Canvas>
         <div className="flight-hud"><div className="hud-title">LIVE FLIGHT VIEW <span className="pulse">● LIVE</span></div><div className="hud-row"><b>{status}</b><span>ALT {pos.y.toFixed(1)}m</span><span>SPD {speed.toFixed(1)}m/s</span><span>HDG {heading.toFixed(0)}°</span></div><div className="hud-row muted">POSITION {pos.x.toFixed(1)} / {pos.y.toFixed(1)} / {pos.z.toFixed(1)} · TARGET {target.x} / {target.y} / {target.z}</div></div>
         <div className="view-switch"><span className="active">AUTONOMOUS CHASE CAMERA · LOCKED</span></div>
