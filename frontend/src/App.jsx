@@ -217,7 +217,7 @@ function App(){
    else if(vy>0)setPhase("ASCENDING");
    else if(vy<0)setPhase("DESCENDING");
  }
- async function startAutopilot(){
+ async function startAutopilot(autoPilot=false){
    if(takeoffCountdown!==null)return;
    if(destinationChosen && !path.length){
      const r=await calculate();
@@ -227,8 +227,8 @@ function App(){
    for(let i=5;i>0;i--){setTakeoffCountdown(i);await new Promise(res=>setTimeout(res,1000))}
    setTakeoffCountdown(null);
    setPos(p=>({...p,y:30}));
-   setStatus("AIRBORNE");setPhase("MANUAL FLIGHT READY");setMode("MANUAL");setSpeed(0);setLanding(false);manualAnnounced.current=false;
-   setMessage("Drone is airborne — use phone controller to fly");
+   setStatus("AIRBORNE");setPhase(autoPilot&&path.length?"AUTOPILOT FLIGHT":"MANUAL FLIGHT READY");setMode(autoPilot&&path.length?"AUTOPILOT":"MANUAL");setSpeed(autoPilot&&path.length?10:0);setLanding(false);manualAnnounced.current=false;
+   setMessage(autoPilot&&path.length?"Autopilot engaged — following safe route":"Drone is airborne — use phone controller to fly");
    speak("Your drone is ready to fly");
  }
 
@@ -280,7 +280,8 @@ function App(){
  commandHandlerRef.current=async cmd=>{
    setPhoneCommand(cmd);
    setRemoteControl(cmd);
-   if(cmd==="START")return startAutopilot();
+   if(cmd==="START")return startAutopilot(false);
+   if(cmd==="AUTOPILOT")return startAutopilot(true);
    if(cmd==="STOP"||cmd==="HOVER"){
      manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,until:0};
      setSpeed(0);
