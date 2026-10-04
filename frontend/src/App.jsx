@@ -409,10 +409,6 @@ function App(){
      <Route path={path} returning={returning.current}/><TargetMarker target={target}/><TargetMarker target={HOME} home/>
      <DroneCamera position={pos} heading={heading}/>
     </Canvas>
-    <div className="flight-hud"><div className="hud-title">DRONE LIVE VIEW <span className="pulse">● LIVE</span></div><div className="hud-row"><b>{status}</b><span>MODE {mode}</span><span>ALT {pos.y.toFixed(1)}m</span><span>SPD {speed.toFixed(1)}m/s</span><span>HDG {heading.toFixed(0)}°</span></div><div className="hud-row muted">DRONE {pos.x.toFixed(1)} / {pos.y.toFixed(1)} / {pos.z.toFixed(1)} · TARGET {target.x} / {target.y} / {target.z} · ETA {eta}s</div></div>
-    <div className="camera-badge">FPV / CHASE CAMERA · LOCKED</div>
-    <div className="drone-reticle">+</div>
-    <div className="mini-monitor"><div className="mini-title">LIVE TRACKING RADAR</div><div className="radar"><div className="radar-line"></div><div className="radar-drone" style={{left:`${50+pos.x*.35}%`,top:`${50+pos.z*.35}%`}}>◆</div><div className="radar-target" style={{left:`${50+target.x*.35}%`,top:`${50+target.z*.35}%`}}>✦</div><div className="radar-home" style={{left:"50%",top:"50%"}}>H</div></div><small>D DRONE · T TARGET · H HOME</small></div>
    </section>
 
    <aside className="control-panel">
