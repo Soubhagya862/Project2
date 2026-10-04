@@ -106,7 +106,7 @@ export default function PhoneController(){
 
  return <div className="phone-controller">
   <header className="remote-header">
-   <div><h1>NAVIGATE-X</h1><p>SMART FLIGHT REMOTE</p></div>
+   <div><h1>NAVIGATE-X</h1><p>FLIGHT CONTROL</p></div>
    <span className={connected?"ok":"danger"}>● {connected?"LINKED":"OFFLINE"}</span>
   </header>
 
@@ -168,6 +168,6 @@ export default function PhoneController(){
 
   <div className={gpsLost?"gps-warning active":"gps-warning"}>⚠ {gpsLost?"GPS SIGNAL LOST — EMERGENCY AUTOPILOT READY":"GPS SIGNAL STABLE"} <b>{gpsLost?"EMERGENCY AUTO":"NORMAL"}</b></div>
   <div className="last-command">LAST COMMAND <b>{last}</b></div>
-  <p className="hint">Phone Remote → Socket.IO → Main Flight Controller → 3D Simulator</p>
+  <p className="hint">Flight Control → Socket.IO → Main Flight Controller → 3D Simulator</p>
  </div>
 }
