@@ -133,7 +133,7 @@ export default function PhoneController(){
 
   <section className="remote-card target-card">
    <div className="section-title"><h3>TARGET LOCATION</h3><span>{confirmed?"LOCKED":"SELECT"}</span></div>
-   <div className="target-map">
+   <div className="target-map" onClick={e=>{const r=e.currentTarget.getBoundingClientRect();const x=Math.round(((e.clientX-r.left)/r.width-.5)*3000);const z=Math.round(((e.clientY-r.top)/r.height-.5)*3000);setTarget({x,y:60,z});setConfirmed(false);setLast("TARGET SELECTED")}}>
     <div className="map-cross x"></div><div className="map-cross z"></div><div className="map-home">H</div>
     <div className="map-drone" style={{left:`${droneLeft}%`,top:`${droneTop}%`}}>D</div>
     <div className="map-target" style={{left:`${targetLeft}%`,top:`${targetTop}%`}}>T</div>
@@ -144,7 +144,6 @@ export default function PhoneController(){
     <button onClick={e=>{const r=e.currentTarget.previousSibling.getBoundingClientRect();void r;}} className="small-action">3 KM MAP</button>
     <button className="confirm-target" onClick={selectTarget} disabled={confirmed}>{confirmed?"✓ TARGET LOCKED":"CONFIRM TARGET"}</button>
    </div>
-   <div className="map-click-layer" onClick={e=>{const r=e.currentTarget.getBoundingClientRect();const x=Math.round(((e.clientX-r.left)/r.width-.5)*3000);const z=Math.round(((e.clientY-r.top)/r.height-.5)*3000);setTarget({x,y:60,z});setConfirmed(false)}}></div>
   </section>
 
   <section className="remote-card control-deck">
