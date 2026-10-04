@@ -7,7 +7,12 @@ import MissionMonitor from "./components/MissionMonitor";
 import DroneSensors from "./components/DroneSensors";
 
 const API=import.meta.env.VITE_API_URL||"http://localhost:5000/api";
-const SOCKET_URL=import.meta.env.VITE_SOCKET_URL||`http://${window.location.hostname}:5000`;
+function getLanBackendUrl(){
+  const configured=import.meta.env.VITE_SOCKET_URL?.trim();
+  if(configured)return configured.replace(/\\/$/,"");
+  const host=window.location.hostname;
+  return `http://${host}:5000`;
+}\nconst SOCKET_URL=getLanBackendUrl();
 const HOME={x:0,y:2,z:0};
 const WORLD={minX:-1500,maxX:1500,minY:5,maxY:300,minZ:-1500,maxZ:1500};
 
