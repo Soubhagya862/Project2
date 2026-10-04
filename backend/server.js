@@ -59,4 +59,4 @@ if(process.env.MONGODB_URI){
   console.log("MONGODB_URI not set — simulation can run without database persistence.");
 }
 
-httpServer.listen(port,()=>console.log(`NAVIGATE-X backend running on http://localhost:${port}`));
+httpServer.listen(port,"0.0.0.0",()=>console.log(`NAVIGATE-X backend running on port ${port} (LAN enabled)`));
