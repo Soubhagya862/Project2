@@ -62,6 +62,9 @@ export default function PhoneController(){
  const droneLeft=50+Math.max(-46,Math.min(46,Number(telemetry.x||0)/30)),droneTop=50+Math.max(-40,Math.min(40,Number(telemetry.z||0)/30)),targetLeft=50+Math.max(-46,Math.min(46,Number(target.x||0)/30)),targetTop=50+Math.max(-40,Math.min(40,Number(target.z||0)/30)),gpsLost=telemetry.gps!=="CONNECTED";
 
  return <div className="flight-control-page">
+  <div style={{width:"100%",height:"42vh",minHeight:"300px",borderBottom:"2px solid rgba(255,255,255,.15)",background:"#081018"}}>
+   <iframe title="NAVIGATE-X 3D Drone Simulator" src={`${window.location.protocol}//${window.location.host}/`} style={{width:"100%",height:"100%",border:"0",display:"block"}} />
+  </div>
   <header className="fc-header"><div><h1>NAVIGATE-X <span>◈</span></h1><p>FLIGHT CONTROL / GPS-DENIED NAVIGATION</p></div><div className="fc-link"><b className={connected?"ok":"danger"}>● {connected?"LINKED":"OFFLINE"}</b><span>PC CONTROL: WASD + Q/E</span></div></header>
   <main className="fc-layout">
    <aside className="fc-left"><div className="fc-panel-title">MISSION / EMERGENCY</div>
