@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useRef,useState} from "react"; import {Canvas,useFrame} from "@react-three/fiber"; import {OrbitControls,Grid} from "@react-three/drei"; import * as THREE from "three";
 const API="http://localhost:5000/api";
-const initialObstacles=[{position:{x:18,y:5,z:0},size:{x:8,y:10,z:10}},{position:{x:38,y:8,z:8},size:{x:8,y:16,z:8}},{position:{x:52,y:4,z:-12},size:{x:12,y:8,z:8}}];
+const initialObstacles=[{position:{x:18,y:5,z:0},size:{x:8,y:10,z:10},type:"STATIC"},{position:{x:38,y:8,z:8},size:{x:8,y:16,z:8},type:"STATIC"},{position:{x:52,y:4,z:-12},size:{x:12,y:8,z:8},type:"STATIC"}];
 function Drone({p}){const g=useRef();useFrame((_,d)=>{if(g.current)g.current.rotation.y+=d*1.5});return <group ref={g} position={[p.x,p.y,p.z]}><mesh><boxGeometry args={[2.5,.7,2]}/><meshStandardMaterial/></mesh>{[[1.8,.4],[1.8,-.4],[-1.8,.4],[-1.8,-.4]].map((m,i)=><group key={i} position={[m[0],.2,m[1]]}><mesh><cylinderGeometry args={[.12,.12,.3,12]}/><meshStandardMaterial/></mesh><mesh rotation={[Math.PI/2,0,0]}><boxGeometry args={[1.3,.06,.12]}/><meshStandardMaterial/></mesh></group>)}</group>}
 function Box({o}){return <mesh position={[o.position.x,o.position.y,o.position.z]}><boxGeometry args={[o.size.x,o.size.y,o.size.z]}/><meshStandardMaterial transparent opacity={.55}/></mesh>}
 function Route({path}){const pts=useMemo(()=>path.map(p=>new THREE.Vector3(p.x,p.y,p.z)),[path]);if(pts.length<2)return null;return <line><bufferGeometry attach="geometry" setFromPoints={pts}/><lineBasicMaterial/></line>}
