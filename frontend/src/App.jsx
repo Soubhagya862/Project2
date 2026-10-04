@@ -55,6 +55,7 @@ function App(){
   const startRef=useRef(null);
   const stopRef=useRef(null);
   const disconnectRef=useRef(null);
+  const pathRef=useRef([]);
 
   const [phoneCommand,setPhoneCommand]=useState("STOP");
   const [phoneConnected,setPhoneConnected]=useState(false);
@@ -72,6 +73,7 @@ function App(){
   const [sensorDistance,setSensorDistance]=useState(12);
   const [message,setMessage]=useState("System ready");
   const [obstacles,setObstacles]=useState(initialObstacles);
+  pathRef.current=path;
 
   async function patchMission(data){
     if(!mission?._id)return;
@@ -237,10 +239,17 @@ function App(){
       else if(cmd==="GPS_TOGGLE")disconnectRef.current?.();
       else if(cmd==="EMERGENCY"){
         setGps(false);
-        setAuto(true);
-        setStatus("EMERGENCY AUTOPILOT");
-        setPhase("PHONE EMERGENCY CONTROL");
-        setMessage("Emergency mode activated from phone");
+        if(pathRef.current.length){
+          setAuto(true);
+          setStatus("EMERGENCY AUTOPILOT");
+          setPhase("PHONE EMERGENCY CONTROL");
+          setMessage("Emergency mode activated from phone");
+        }else{
+          setAuto(false);
+          setStatus("READY");
+          setPhase("NO ROUTE");
+          setMessage("Create/calculate a route before emergency navigation");
+        }
       }else if(["UP","DOWN","LEFT","RIGHT"].includes(cmd)){
         setAuto(false);
         setSpeed(5);
