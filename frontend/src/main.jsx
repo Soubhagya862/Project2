@@ -5,5 +5,6 @@ import PhoneController from "./PhoneController.jsx";
 import "./styles.css";
 import "./phone.css";
 
-const Page=(window.location.pathname==="/flight-control"||window.location.pathname==="/phone")?PhoneController:App;
+const path=window.location.pathname;
+const Page=path==="/drone"?App:PhoneController;
 createRoot(document.getElementById("root")).render(<React.StrictMode><Page/></React.StrictMode>);
