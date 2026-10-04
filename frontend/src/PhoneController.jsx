@@ -4,10 +4,11 @@ import "./phone.css";
 
 function getLanBackendUrl(){
   const configured=import.meta.env.VITE_SOCKET_URL?.trim();
-  if(configured)return configured.replace(/\\/$/,"");
+  if(configured)return configured.replace(/\/$/,"");
   const host=window.location.hostname;
   return `http://${host}:5000`;
-}\nconst SOCKET_URL=getLanBackendUrl();
+}
+const SOCKET_URL=getLanBackendUrl();
 
 export default function PhoneController(){
  const socketRef=useRef(null);
