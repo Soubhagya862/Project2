@@ -8,6 +8,15 @@ import DroneSensors from "./components/DroneSensors";
 
 const API=import.meta.env.VITE_API_URL||"http://localhost:5000/api";
 function getLanBackendUrl(){
+ const configured=import.meta.env.VITE_SOCKET_URL?.trim();
+ if(configured)return configured.replace(/\/$/,"");
+ const host=window.location.hostname;
+ return `http://${host}:5000`;
+}
+const SOCKET_URL=getLanBackendUrl();
+
+const API=import.meta.env.VITE_API_URL||"http://localhost:5000/api";
+function getLanBackendUrl(){
   const configured=import.meta.env.VITE_SOCKET_URL?.trim();
   if(configured)return configured.replace(/\\/$/,"");
   const host=window.location.hostname;
