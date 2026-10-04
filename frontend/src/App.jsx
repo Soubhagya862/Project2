@@ -225,7 +225,8 @@ function SensorRays({ position, heading, range }) {
 
 function Scene({ position, heading, target, route, detectedObstacle, sensorRange, missionState, speed }) {
   const camera = useRef();
-  const fpv = speed > 1 && ["AUTONOMOUS", "RETURNING", "EMERGENCY AUTOPILOT"].includes(missionState);
+  const flight = ["AUTONOMOUS", "RETURNING", "EMERGENCY AUTOPILOT"].includes(missionState);
+  const flightView = flight && speed > 1;
 
   useFrame((_, dt) => {
     if (!camera.current) return;
@@ -233,32 +234,38 @@ function Scene({ position, heading, target, route, detectedObstacle, sensorRange
     const a = heading * Math.PI / 180;
     const forward = new THREE.Vector3(-Math.sin(a), 0, -Math.cos(a));
 
-    if (fpv) {
-      // TRUE DRONE FPV: the camera is rigidly attached to the aircraft.
-      // No camera lag/lerp means the world moves naturally as the drone flies.
+    if (flightView) {
+      // Stable third-person flight view: the complete drone stays visible,
+      // but it is deliberately kept far enough from the camera.
+      const distanceBehind = 42;
+      const heightAbove = 20;
       const cameraPosition = new THREE.Vector3(
-        position.x + forward.x * 3.5,
-        position.y + 1.8,
-        position.z + forward.z * 3.5
+        position.x - forward.x * distanceBehind,
+        position.y + heightAbove,
+        position.z - forward.z * distanceBehind
       );
-      camera.current.position.copy(cameraPosition);
 
-      const lookPoint = cameraPosition.clone()
-        .add(forward.clone().multiplyScalar(250));
+      camera.current.position.lerp(
+        cameraPosition,
+        Math.min(1, dt * 5)
+      );
+
+      // Look slightly ahead of the drone so its direction and environment
+      // remain visible without making the drone fill the screen.
+      const lookPoint = new THREE.Vector3(
+        position.x + forward.x * 90,
+        position.y + 5,
+        position.z + forward.z * 90
+      );
       camera.current.lookAt(lookPoint);
 
-      // Keep the FPV horizon stable instead of copying drone roll/flapping.
-      camera.current.rotation.z = 0;
-
-      const desiredFov = 82;
       camera.current.fov = THREE.MathUtils.lerp(
         camera.current.fov,
-        desiredFov,
-        Math.min(1, dt * 10)
+        58,
+        Math.min(1, dt * 5)
       );
       camera.current.updateProjectionMatrix();
     } else {
-      // Outside operator view while stationary.
       const desired = new THREE.Vector3(
         position.x + 620,
         position.y + 520,
@@ -494,7 +501,7 @@ export default function App() {
               <Scene position={position} heading={heading} target={target} route={route} detectedObstacle={detectedObstacle} sensorRange={sensorRange} missionState={missionState} speed={speed}/>
               <Engine position={position} missionState={missionState} route={route} setPosition={setPosition} setHeading={setHeading} setSpeed={setSpeed} setBattery={setBattery} setMissionState={setMissionState} setDetectedObstacle={setDetectedObstacle} setSensorRange={setSensorRange}/>
             </Canvas>
-            <div className={speed > 1 ? "view-mode fpv-active" : "view-mode"}>{speed > 1 ? "● DRONE FPV VIEW • MOVING" : "● OPERATOR VIEW • STATIONARY"}</div>
+            <div className={speed > 1 ? "view-mode fpv-active" : "view-mode"}>{speed > 1 ? "● DRONE FLIGHT VIEW • FULL DRONE" : "● OPERATOR VIEW • STATIONARY"}</div>
             <div className="monitor-hud"><span>EST X <b>{estimatedPosition.x.toFixed(1)}m</b></span><span>EST Y <b>{estimatedPosition.y.toFixed(1)}m</b></span><span>EST Z <b>{estimatedPosition.z.toFixed(1)}m</b></span><span>HDG <b>{heading.toFixed(0)}°</b></span><span>GPS <b>{gpsDenied?"DENIED":"CONNECTED"}</b></span></div>
             <div className="route-status"><span>MISSION {missionState}</span><b>{progress.toFixed(1)}% • {distance.toFixed(1)}m TARGET • {route.length} WAYPOINTS</b></div>
           </div>
