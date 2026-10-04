@@ -20,7 +20,7 @@ export default function PhoneController(){
 
  useEffect(()=>{
   const s=io(SOCKET_URL);socketRef.current=s;
-  s.on("connect",()=>setConnected(true));
+  s.on("connect",()=>{setConnected(true);s.emit("register-client",{role:"phone"});});
   s.on("disconnect",()=>setConnected(false));
   s.on("phone-telemetry",d=>{if(!d)return;setTelemetry(d);if(d.target){setTarget(d.target);if(d.status&&d.status!=="READY")setConfirmed(true)}});
   return()=>s.disconnect();
@@ -28,7 +28,7 @@ export default function PhoneController(){
 
  function send(command){
   setLast(command);
-  if(socketRef.current?.connected){socketRef.current.emit("drone-command",command)}else{setLast("OFFLINE")}
+  if(socketRef.current?.connected){socketRef.current.emit("phone-control",command)}else{setLast("OFFLINE")}
 }
 
  function selectTarget(){
