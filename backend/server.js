@@ -17,15 +17,31 @@ const io=new SocketIOServer(httpServer,{
   cors:{origin:"*",methods:["GET","POST","PATCH"]}
 });
 
+const connectedClients=new Map();
+
 io.on("connection",socket=>{
+  connectedClients.set(socket.id,{role:"unknown"});
   socket.emit("server-ready",{service:"NAVIGATE-X",connectedAt:Date.now()});
+  socket.on("register-client",({role}={})=>{
+    if(role!=="phone"&&role!=="simulator")return;
+    connectedClients.set(socket.id,{role});
+    io.emit("client-status",{role,connected:true});
+  });
   socket.on("phone-control",data=>{
-    if(typeof data==="string") io.emit("flight-control-command",data);
+    const sender=connectedClients.get(socket.id);
+    if(sender?.role!=="phone"||typeof data!=="string")return;
+    for(const [id,client] of connectedClients){
+      if(client.role==="simulator")io.to(id).emit("flight-control-command",data);
+    }
   });
   socket.on("phone-telemetry",data=>{
     socket.broadcast.emit("phone-telemetry",data);
   });
-  socket.on("disconnect",()=>{});
+  socket.on("disconnect",()=>{
+    const client=connectedClients.get(socket.id);
+    if(client?.role&&client.role!=="unknown")io.emit("client-status",{role:client.role,connected:false});
+    connectedClients.delete(socket.id);
+  });
 });
 
 app.use(cors({origin:process.env.CLIENT_URL||"*"}));
