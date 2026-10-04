@@ -24,7 +24,9 @@ export default function PhoneController(){
 
  function selectTarget(){
   const safe={x:Number(target.x)||0,y:Math.max(5,Number(target.y)||30),z:Number(target.z)||0};
-  setTarget(safe);setConfirmed(true);send("TARGET:"+JSON.stringify(safe));
+  setTarget(safe);setConfirmed(true);setLast("TARGET");
+  socketRef.current?.emit("target-sync",safe);
+  socketRef.current?.emit("phone-control","TARGET:"+JSON.stringify(safe));
  }
 
  return <div className="phone-controller">
