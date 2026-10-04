@@ -14,9 +14,9 @@ export function findPath(
   start,
   goal,
   obstacles=[],
-  bounds={minX:0,maxX:80,minY:0,maxY:40,minZ:-40,maxZ:40},
-  margin=2,
-  step=20
+  bounds={minX:-1500,maxX:1500,minY:5,maxY:300,minZ:-1500,maxZ:1500},
+  margin=25,
+  step=30
 ){
   const blocked=p=>obstacles.some(o=>{
     const pos=o.position||{x:0,y:0,z:0};
