@@ -15,6 +15,7 @@ export default function PhoneController(){
  const joystickRef=useRef(null);
  const joystickTimerRef=useRef(null);
  const joystickActiveRef=useRef(false);
+ const joystickVectorRef=useRef({x:0,y:0});
  const lastJoystickCommandRef=useRef("");
  const [connected,setConnected]=useState(false);
  const [last,setLast]=useState("HOVER");
@@ -70,6 +71,7 @@ export default function PhoneController(){
    const max=r.width*.34;
    const x=Math.max(-1,Math.min(1,(ev.clientX-cx)/max));
    const y=Math.max(-1,Math.min(1,(ev.clientY-cy)/max));
+   joystickVectorRef.current={x,y};
    setJoystick({x,y});
    joystickCommand(x,y);
   };
@@ -77,7 +79,7 @@ export default function PhoneController(){
   update(e);
   clearInterval(joystickTimerRef.current);
   joystickTimerRef.current=setInterval(()=>{
-   if(joystickActiveRef.current)joystickCommand(joystickRef.current?._x||0,joystickRef.current?._y||0);
+   if(joystickActiveRef.current)joystickCommand(joystickVectorRef.current.x,joystickVectorRef.current.y);
   },100);
  }
  function moveJoystick(e){
@@ -91,6 +93,7 @@ export default function PhoneController(){
  }
  function endJoystick(e){
   joystickActiveRef.current=false;
+  joystickVectorRef.current={x:0,y:0};
   clearInterval(joystickTimerRef.current);
   lastJoystickCommandRef.current="";
   setJoystick({x:0,y:0});
