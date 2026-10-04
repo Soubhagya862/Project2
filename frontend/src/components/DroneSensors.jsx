@@ -1,4 +1,4 @@
-import {useMemo,useRef,useState} from "react";
+import {useRef,useState} from "react";
 import {useFrame} from "@react-three/fiber";
 import {Line} from "@react-three/drei";
 
@@ -55,14 +55,6 @@ export default function DroneSensors({position,obstacles=[],range=12,onDetection
       onDetection?.({detected,distance:front,readings:next});
     }
   });
-
-  const lines=useMemo(()=>DIRECTIONS.map(sensor=>(
-    <Line
-      key={sensor.name}
-      points={[[0,0,0],[sensor.v.x*range,sensor.v.y*range,sensor.v.z*range]]}
-      lineWidth={2}
-    />
-  )),[range]);
 
   return <group position={[position.x,position.y,position.z]}>
     {lines.map((line,i)=>{
