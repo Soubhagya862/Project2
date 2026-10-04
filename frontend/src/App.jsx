@@ -210,7 +210,9 @@ function Scene({ position, heading, flying, bank, pitch }) {
 
     // Fixed drone-follow camera: touch/drag on the 3D monitor cannot orbit the scene.
     // The camera smoothly follows the drone and looks only in the drone's current heading.
-    const forward = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
+    // The drone's physical FRONT is local -Z (the cyan camera/sensor is on -Z).
+    // Convert that local -Z direction into world space using the drone heading.
+    const forward = new THREE.Vector3(-Math.sin(heading), 0, -Math.cos(heading));
     const desiredCamera = new THREE.Vector3(
       position.x - forward.x * 105,
       position.y + 62,
