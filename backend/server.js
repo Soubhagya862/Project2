@@ -8,6 +8,7 @@ import missionRoutes from "./routes/missionRoutes.js";
 import routeRoutes from "./routes/routeRoutes.js";
 import telemetryRoutes from "./routes/telemetryRoutes.js";
 import obstacleRoutes from "./routes/obstacleRoutes.js";
+import Telemetry from "./models/Telemetry.js";
 
 dotenv.config();
 
@@ -61,6 +62,32 @@ io.on("connection",socket=>{
     const sender=connectedClients.get(socket.id);
     if(sender?.role!=="bridge"||typeof data!=="string")return;
     publishCommand(data,"bridge");
+  });
+
+  socket.on("telemetry",async(data={})=>{
+    socket.broadcast.emit("telemetry",data);
+    if(data.missionId && mongoose.isValidObjectId(data.missionId)){
+      try{
+        await Telemetry.create({
+          missionId:data.missionId,
+          position:data.position||{x:0,y:0,z:0},
+          estimatedPosition:data.estimatedPosition,
+          altitude:data.position?.y,
+          speed:data.speed,
+          heading:data.heading,
+          gpsStatus:data.gpsStatus,
+          obstacleDetected:Boolean(data.detectedObstacle),
+          detectedObstacle:data.detectedObstacle||null,
+          sensorDistance:data.sensorDistance,
+          targetDistance:data.targetDistance,
+          missionProgress:data.missionProgress,
+          positionError:data.sensorError,
+          phase:data.phase
+        });
+      }catch(e){
+        console.error("Telemetry:",e.message);
+      }
+    }
   });
 
   socket.on("phone-telemetry",data=>{
