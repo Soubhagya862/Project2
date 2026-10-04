@@ -51,6 +51,10 @@ function App(){
   const socketRef=useRef(null);
   const idx=useRef(0);
   const returningRef=useRef(false);
+  const replanLock=useRef(false);
+  const startRef=useRef(null);
+  const stopRef=useRef(null);
+  const disconnectRef=useRef(null);
 
   const [phoneCommand,setPhoneCommand]=useState("STOP");
   const [phoneConnected,setPhoneConnected]=useState(false);
@@ -217,6 +221,10 @@ function App(){
     }
   };
 
+  startRef.current=start;
+  stopRef.current=stop;
+  disconnectRef.current=disconnect;
+
   useEffect(()=>{
     const s=io(SOCKET_URL);
     socketRef.current=s;
@@ -224,9 +232,9 @@ function App(){
     s.on("disconnect",()=>setPhoneConnected(false));
     s.on("phone-control",cmd=>{
       setPhoneCommand(cmd);
-      if(cmd==="START")start();
-      else if(cmd==="STOP")stop();
-      else if(cmd==="GPS_TOGGLE")disconnect();
+      if(cmd==="START")startRef.current?.();
+      else if(cmd==="STOP")stopRef.current?.();
+      else if(cmd==="GPS_TOGGLE")disconnectRef.current?.();
       else if(cmd==="EMERGENCY"){
         setGps(false);
         setAuto(true);
@@ -353,6 +361,10 @@ function App(){
             onDetection={({detected,distance:front})=>{
               setSensor(detected);
               setSensorDistance(front);
+              if(detected && front<3.5 && auto && !replanLock.current && !["REPLANNING","OBSTACLE DETECTED"].includes(status)){
+                replanLock.current=true;
+                replan().finally(()=>setTimeout(()=>{replanLock.current=false;},1500));
+              }
             }}
           />
           <Route path={path}/>
