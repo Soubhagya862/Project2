@@ -98,11 +98,22 @@ function noisy(v, amount = SENSOR_NOISE) {
 function Drone({ position, heading, active }) {
   const group = useRef();
   const rotors = useRef([]);
+  const wings = useRef([]);
   useFrame((_, dt) => {
     if (!group.current) return;
-    group.current.rotation.y = THREE.MathUtils.lerp(group.current.rotation.y, heading * Math.PI / 180, dt * 8);
-    group.current.position.y += active ? Math.sin(performance.now() * 0.008) * dt * 1.4 : 0;
-    rotors.current.forEach((r) => r && (r.rotation.y += dt * (active ? 42 : 8)));
+    group.current.rotation.y = THREE.MathUtils.lerp(
+      group.current.rotation.y,
+      heading * Math.PI / 180,
+      dt * 8
+    );
+    rotors.current.forEach((r) => {
+      if (r) r.rotation.y += dt * (active ? 55 : 6);
+    });
+
+    // Bird/drone-style articulated wings: flap only while the aircraft is flying.
+    const flap = active ? Math.sin(performance.now() * 0.012) * 0.22 : 0;
+    if (wings.current[0]) wings.current[0].rotation.z = -0.18 + flap;
+    if (wings.current[1]) wings.current[1].rotation.z = 0.18 - flap;
   });
 
   const motors = [[-5, -4], [5, -4], [-5, 4], [5, 4]];
@@ -112,10 +123,36 @@ function Drone({ position, heading, active }) {
         <capsuleGeometry args={[1.4, 4.2, 8, 24]} />
         <meshStandardMaterial color="#172b36" metalness={0.9} roughness={0.18} />
       </mesh>
+
+      {/* Forward nose / camera sensor */}
       <mesh position={[0, 0.5, -2.5]}>
         <sphereGeometry args={[0.7, 24, 18]} />
         <meshStandardMaterial color="#1de5ff" emissive="#00a8c5" emissiveIntensity={4} />
       </mesh>
+
+      {/* Two articulated wings */}
+      <group ref={(el) => (wings.current[0] = el)} position={[-1.4, 0.15, 0.15]}>
+        <mesh rotation={[0, 0, -0.08]} castShadow>
+          <boxGeometry args={[6.5, 0.28, 1.45]} />
+          <meshStandardMaterial color="#2b5668" metalness={0.85} roughness={0.2} />
+        </mesh>
+        <mesh position={[-3.1, 0, -0.1]} rotation={[0, 0, -0.12]}>
+          <boxGeometry args={[2.2, 0.16, 0.9]} />
+          <meshStandardMaterial color="#58e7ff" emissive="#087d91" emissiveIntensity={1.2} />
+        </mesh>
+      </group>
+
+      <group ref={(el) => (wings.current[1] = el)} position={[1.4, 0.15, 0.15]}>
+        <mesh rotation={[0, 0, 0.08]} castShadow>
+          <boxGeometry args={[6.5, 0.28, 1.45]} />
+          <meshStandardMaterial color="#2b5668" metalness={0.85} roughness={0.2} />
+        </mesh>
+        <mesh position={[3.1, 0, -0.1]} rotation={[0, 0, 0.12]}>
+          <boxGeometry args={[2.2, 0.16, 0.9]} />
+          <meshStandardMaterial color="#58e7ff" emissive="#087d91" emissiveIntensity={1.2} />
+        </mesh>
+      </group>
+
       {motors.map(([x, z], i) => (
         <group key={i} position={[x * 0.55, 0, z * 0.55]}>
           <mesh rotation={[0, Math.atan2(z, x), 0]}>
@@ -126,9 +163,18 @@ function Drone({ position, heading, active }) {
             <cylinderGeometry args={[0.65, 0.78, 0.65, 20]} />
             <meshStandardMaterial color="#0c171d" metalness={0.9} />
           </mesh>
-          <group ref={(el) => (rotors.current[i] = el)} position={[0, 1, z > 0 ? 2.4 : -2.4]}>
-            <mesh><boxGeometry args={[4.8, 0.08, 0.22]} /><meshStandardMaterial color="#a9eaff" transparent opacity={0.65} /></mesh>
-            <mesh rotation={[0, Math.PI / 2, 0]}><boxGeometry args={[4.8, 0.08, 0.22]} /><meshStandardMaterial color="#a9eaff" transparent opacity={0.65} /></mesh>
+          <group
+            ref={(el) => (rotors.current[i] = el)}
+            position={[0, 1, z > 0 ? 2.4 : -2.4]}
+          >
+            <mesh>
+              <boxGeometry args={[4.8, 0.08, 0.22]} />
+              <meshStandardMaterial color="#a9eaff" transparent opacity={0.65} />
+            </mesh>
+            <mesh rotation={[0, Math.PI / 2, 0]}>
+              <boxGeometry args={[4.8, 0.08, 0.22]} />
+              <meshStandardMaterial color="#a9eaff" transparent opacity={0.65} />
+            </mesh>
           </group>
         </group>
       ))}
@@ -177,17 +223,52 @@ function SensorRays({ position, heading, range }) {
   );
 }
 
-function Scene({ position, heading, target, route, detectedObstacle, sensorRange, missionState }) {
+function Scene({ position, heading, target, route, detectedObstacle, sensorRange, missionState, speed }) {
   const camera = useRef();
+  const fpv = speed > 1 && ["AUTONOMOUS", "RETURNING", "EMERGENCY AUTOPILOT"].includes(missionState);
+
   useFrame((_, dt) => {
     if (!camera.current) return;
-    const desired = new THREE.Vector3(position.x + 620, position.y + 520, position.z + 700);
-    camera.current.position.lerp(desired, Math.min(1, dt * 2.4));
-    camera.current.lookAt(position.x, position.y, position.z);
+
+    const a = heading * Math.PI / 180;
+    const forward = new THREE.Vector3(-Math.sin(a), 0, -Math.cos(a));
+
+    if (fpv) {
+      // FPV/drone view: camera is mounted on the nose and looks only in flight direction.
+      const desired = new THREE.Vector3(
+        position.x + forward.x * 8,
+        position.y + 4,
+        position.z + forward.z * 8
+      );
+      camera.current.position.lerp(desired, Math.min(1, dt * 10));
+      const lookPoint = new THREE.Vector3(
+        position.x + forward.x * 180,
+        position.y + 2,
+        position.z + forward.z * 180
+      );
+      camera.current.lookAt(lookPoint);
+      camera.current.fov = THREE.MathUtils.lerp(camera.current.fov, 78, Math.min(1, dt * 8));
+      camera.current.updateProjectionMatrix();
+    } else {
+      // Stationary/ready view: operator camera remains outside the drone.
+      const desired = new THREE.Vector3(position.x + 620, position.y + 520, position.z + 700);
+      camera.current.position.lerp(desired, Math.min(1, dt * 2.4));
+      camera.current.lookAt(position.x, position.y, position.z);
+      camera.current.fov = THREE.MathUtils.lerp(camera.current.fov, 48, Math.min(1, dt * 5));
+      camera.current.updateProjectionMatrix();
+    }
   });
   return (
     <>
       <PerspectiveCamera ref={camera} makeDefault position={[620, 550, 700]} fov={48} />
+      {fpv && (
+        <group>
+          <mesh position={[position.x, position.y, position.z]}>
+            <sphereGeometry args={[0.25, 12, 8]} />
+            <meshBasicMaterial color="#58e7ff" />
+          </mesh>
+        </group>
+      )}
       <ambientLight intensity={1.4} />
       <directionalLight position={[300, 700, 250]} intensity={2.6} castShadow />
       <Grid args={[4500, 4500]} cellSize={50} sectionSize={250} fadeDistance={3200} />
@@ -402,9 +483,10 @@ export default function App() {
           <div className="canvas-wrap">
             <Canvas shadows dpr={[1,1.5]}>
               <color attach="background" args={["#07131c"]}/><fog attach="fog" args={["#07131c",700,3000]}/>
-              <Scene position={position} heading={heading} target={target} route={route} detectedObstacle={detectedObstacle} sensorRange={sensorRange} missionState={missionState}/>
+              <Scene position={position} heading={heading} target={target} route={route} detectedObstacle={detectedObstacle} sensorRange={sensorRange} missionState={missionState} speed={speed}/>
               <Engine position={position} missionState={missionState} route={route} setPosition={setPosition} setHeading={setHeading} setSpeed={setSpeed} setBattery={setBattery} setMissionState={setMissionState} setDetectedObstacle={setDetectedObstacle} setSensorRange={setSensorRange}/>
             </Canvas>
+            <div className={speed > 1 ? "view-mode fpv-active" : "view-mode"}>{speed > 1 ? "● DRONE FPV VIEW • MOVING" : "● OPERATOR VIEW • STATIONARY"}</div>
             <div className="monitor-hud"><span>EST X <b>{estimatedPosition.x.toFixed(1)}m</b></span><span>EST Y <b>{estimatedPosition.y.toFixed(1)}m</b></span><span>EST Z <b>{estimatedPosition.z.toFixed(1)}m</b></span><span>HDG <b>{heading.toFixed(0)}°</b></span><span>GPS <b>{gpsDenied?"DENIED":"CONNECTED"}</b></span></div>
             <div className="route-status"><span>MISSION {missionState}</span><b>{progress.toFixed(1)}% • {distance.toFixed(1)}m TARGET • {route.length} WAYPOINTS</b></div>
           </div>
