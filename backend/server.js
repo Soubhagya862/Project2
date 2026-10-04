@@ -11,6 +11,9 @@ import obstacleRoutes from "./routes/obstacleRoutes.js";
 
 dotenv.config();
 const app=express();
+const httpServer=createServer(app);
+const io=new SocketIOServer(httpServer,{cors:{origin:"*"}});
+io.on("connection",socket=>{socket.on("phone-control",data=>socket.broadcast.emit("phone-control",data));socket.on("phone-telemetry",data=>socket.broadcast.emit("phone-telemetry",data));});
 app.use(cors({origin:process.env.CLIENT_URL||"http://localhost:5173"}));
 app.use(express.json());
 app.get("/api/health",(req,res)=>res.json({ok:true,service:"NAVIGATE-X"}));
@@ -23,4 +26,4 @@ const port=process.env.PORT||5000;
 if(process.env.MONGODB_URI){
  mongoose.connect(process.env.MONGODB_URI).then(()=>console.log("MongoDB connected")).catch(e=>console.error("MongoDB:",e.message));
 }
-app.listen(port,()=>console.log(`NAVIGATE-X backend running on http://localhost:${port}`));
+httpServer.listen(port,()=>console.log(`NAVIGATE-X backend running on http://localhost:${port}`));
