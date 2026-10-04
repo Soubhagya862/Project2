@@ -20,6 +20,27 @@ const OBSTACLES = [
   { id: "O-06", x: 1950, y: 100, z: -1050, sx: 260, sy: 200, sz: 220 },
 ];
 
+const sensorDistanceToObstacle = (position, heading, obstacle, maxRange = 300) => {
+  const a = heading * Math.PI / 180;
+  const forward = { x:-Math.sin(a), y:0, z:-Math.cos(a) };
+  const dx = obstacle.x-position.x, dz = obstacle.z-position.z;
+  const horizontal = Math.hypot(dx,dz);
+  if (horizontal < 0.001) return 0;
+  const dot = (dx*forward.x + dz*forward.z) / horizontal;
+  if (dot < Math.cos(0.62)) return Infinity;
+  return Math.max(0, horizontal - Math.max(obstacle.sx, obstacle.sz)/2) <= maxRange
+    ? Math.max(0, horizontal - Math.max(obstacle.sx, obstacle.sz)/2)
+    : Infinity;
+};
+
+function scanEnvironment(position, heading, maxRange = 300) {
+  const detected = OBSTACLES
+    .map(o => ({ ...o, distance:sensorDistanceToObstacle(position, heading, o, maxRange) }))
+    .filter(o => Number.isFinite(o.distance))
+    .sort((a,b)=>a.distance-b.distance);
+  return detected;
+}
+
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const dist3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 const pointInside = (p, o, margin = 45) =>
@@ -27,7 +48,7 @@ const pointInside = (p, o, margin = 45) =>
   Math.abs(p.y - o.y) <= o.sy / 2 + margin &&
   Math.abs(p.z - o.z) <= o.sz / 2 + margin;
 
-function segmentBlocked(a, b) {
+function segmentBlocked(a, b, obstacles = OBSTACLES) {
   const length = dist3(a, b);
   const steps = Math.max(2, Math.ceil(length / 35));
   for (let i = 0; i <= steps; i++) {
@@ -37,17 +58,17 @@ function segmentBlocked(a, b) {
       y: a.y + (b.y - a.y) * t,
       z: a.z + (b.z - a.z) * t,
     };
-    if (OBSTACLES.some((o) => pointInside(p, o))) return true;
+    if (obstacles.some((o) => pointInside(p, o))) return true;
   }
   return false;
 }
 
-function createRoute(start, target) {
+function createRoute(start, target, obstacles = OBSTACLES) {
   const direct = [start, target];
-  if (!segmentBlocked(start, target)) return direct;
+  if (!segmentBlocked(start, target, obstacles)) return direct;
 
   const candidates = [];
-  for (const o of OBSTACLES) {
+  for (const o of obstacles) {
     const pad = 75;
     const x = o.sx / 2 + pad;
     const y = o.sy / 2 + pad;
@@ -65,7 +86,7 @@ function createRoute(start, target) {
   const remaining = [...candidates, target];
 
   for (let guard = 0; guard < 18 && remaining.length; guard++) {
-    const visible = remaining.filter((p) => !segmentBlocked(current, p));
+    const visible = remaining.filter((p) => !segmentBlocked(current, p, obstacles));
     if (!visible.length) {
       const highest = [...remaining].sort((a, b) => b.y - a.y)[0];
       route.push(highest);
@@ -86,7 +107,7 @@ function createRoute(start, target) {
   const smoothed = [route[0]];
   for (let i = 1; i < route.length; i++) {
     const last = smoothed[smoothed.length - 1];
-    if (i === route.length - 1 || segmentBlocked(last, route[i + 1])) smoothed.push(route[i]);
+    if (i === route.length - 1 || segmentBlocked(last, route[i + 1], obstacles)) smoothed.push(route[i]);
   }
   return smoothed;
 }
@@ -265,7 +286,7 @@ function SensorRays({ position, heading, range }) {
   );
 }
 
-function Scene({ position, heading, target, route, detectedObstacle, sensorRange, missionState, speed }) {
+function Scene({ position, heading, target, route, detectedObstacle, sensorRange, missionState, speed, discoveredObstacles }) {
   const camera = useRef();
   const flight = ["AUTONOMOUS", "RETURNING", "EMERGENCY AUTOPILOT"].includes(missionState);
   const flightView = flight && speed > 1;
@@ -332,7 +353,7 @@ function Scene({ position, heading, target, route, detectedObstacle, sensorRange
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow><planeGeometry args={[4500, 4500]} /><meshStandardMaterial color="#17291f" roughness={1} /></mesh>
       <Marker point={HOME} type="home" />
       <Marker point={target} type="target" />
-      {OBSTACLES.map((o) => <Obstacle key={o.id} obstacle={o} detected={detectedObstacle === o.id} />)}
+      {OBSTACLES.map((o) => <Obstacle key={o.id} obstacle={o} detected={detectedObstacle === o.id || discoveredObstacles.includes(o.id)} />)}
       <RouteLine route={route} />
       <SensorRays position={position} heading={heading} range={sensorRange} />
       <Drone position={position} heading={heading} active={missionState === "AUTONOMOUS" || missionState === "RETURNING" || missionState === "EMERGENCY AUTOPILOT"} />
@@ -360,7 +381,7 @@ function Metric({ label, value, className = "" }) {
   return <div className={"metric " + className}><span>{label}</span><b>{value}</b></div>;
 }
 
-function Engine({ position, missionState, route, setPosition, setHeading, setSpeed, setBattery, setMissionState, setDetectedObstacle, setSensorRange }) {
+function Engine({ position, heading, missionState, route, target, setPosition, setHeading, setSpeed, setBattery, setMissionState, setDetectedObstacle, setSensorRange, setRoute, setReplans, pathMode, setDiscoveredObstacles, setScanCount }) {
   const state = useRef({ ...position });
   const velocity = useRef({ x: 0, y: 0, z: 0 });
   useFrame((_, dt) => {
@@ -395,9 +416,30 @@ function Engine({ position, missionState, route, setPosition, setHeading, setSpe
     const hd = Math.atan2(-velocity.current.x, -velocity.current.z) * 180 / Math.PI;
     setHeading((hd + 360) % 360);
     setBattery((b) => Math.max(0, b - dt * 0.025));
-    const nearestObstacle = OBSTACLES.map((o) => ({ id:o.id, d:Math.max(0, dist3(state.current,o)-Math.max(o.sx,o.sy,o.sz)/2) })).sort((a,b)=>a.d-b.d)[0];
-    setDetectedObstacle(nearestObstacle && nearestObstacle.d < 300 ? nearestObstacle.id : null);
-    setSensorRange(nearestObstacle ? Math.min(300, nearestObstacle.d) : 300);
+    // Simulated onboard vision/LiDAR scan. The drone only "discovers"
+    // obstacles inside its sensor cone and remembers their IDs.
+    const scan = scanEnvironment(state.current, heading, 300);
+    setScanCount((n) => n + (scan.length ? 1 : 0));
+    if (scan.length) {
+      setDiscoveredObstacles((old) => [...new Set([...old, ...scan.map(o => o.id)])]);
+    }
+
+    const nearestObstacle = scan[0] || null;
+    setDetectedObstacle(nearestObstacle && nearestObstacle.distance < 300 ? nearestObstacle.id : null);
+    setSensorRange(nearestObstacle ? Math.min(300, nearestObstacle.distance) : 300);
+
+    // Autonomous mode can replan when a remembered/visually detected obstacle
+    // makes the next route segment unsafe.
+    if (pathMode === "DRONE" && missionState !== "RETURNING" && nearestObstacle && nearestObstacle.distance < 180) {
+      const nextWaypoint = route[nextIndex];
+      if (nextWaypoint && segmentBlocked(state.current, nextWaypoint, OBSTACLES)) {
+        const replanned = createRoute({ ...state.current }, { ...target }, OBSTACLES);
+        if (replanned.length > 1) {
+          setRoute(replanned);
+          setReplans((n) => n + 1);
+        }
+      }
+    }
   });
   return null;
 }
@@ -423,6 +465,8 @@ export default function App() {
   const [targetSelectionPhase, setTargetSelectionPhase] = useState("TARGET");
   const [pathMode, setPathMode] = useState("DRONE"); // DRONE = automatic vision/memory, MANUAL = operator waypoints
   const [pathAnalyzing, setPathAnalyzing] = useState(false);
+  const [discoveredObstacles, setDiscoveredObstacles] = useState([]);
+  const [scanCount, setScanCount] = useState(0);
   const socketRef = useRef(null);
   const estimatorRef = useRef({ ...HOME, bias:{x:0,y:0,z:0} });
 
@@ -533,9 +577,13 @@ export default function App() {
     // simulated vision/depth scan. It creates the actual waypoints; the
     // operator does not choose them.
     window.setTimeout(() => {
-      const planned = createRoute({ ...position }, { ...pendingTarget });
+      const scanned = scanEnvironment(position, heading, 300);
+      setDiscoveredObstacles(scanned.map(o => o.id));
+      setScanCount((n) => n + 1);
+      const memory = OBSTACLES.filter(o => scanned.some(s => s.id === o.id));
+      const planned = createRoute({ ...position }, { ...pendingTarget }, memory.length ? memory : OBSTACLES);
       setPathPoints(planned.slice(1, -1));
-      setPathAnalyzing(false);
+      setPathAnalyzing(false); setDiscoveredObstacles([]); setScanCount(0);
     }, 900);
   };
 
@@ -609,8 +657,8 @@ export default function App() {
           <div className="canvas-wrap">
             <Canvas shadows dpr={[1,1.5]}>
               <color attach="background" args={["#07131c"]}/><fog attach="fog" args={["#07131c",700,3000]}/>
-              <Scene position={position} heading={heading} target={target} route={route} detectedObstacle={detectedObstacle} sensorRange={sensorRange} missionState={missionState} speed={speed}/>
-              <Engine position={position} missionState={missionState} route={route} setPosition={setPosition} setHeading={setHeading} setSpeed={setSpeed} setBattery={setBattery} setMissionState={setMissionState} setDetectedObstacle={setDetectedObstacle} setSensorRange={setSensorRange}/>
+              <Scene position={position} heading={heading} target={target} route={route} detectedObstacle={detectedObstacle} sensorRange={sensorRange} missionState={missionState} speed={speed} discoveredObstacles={discoveredObstacles}/>
+              <Engine position={position} heading={heading} missionState={missionState} route={route} target={target} setPosition={setPosition} setHeading={setHeading} setSpeed={setSpeed} setBattery={setBattery} setMissionState={setMissionState} setDetectedObstacle={setDetectedObstacle} setSensorRange={setSensorRange} setRoute={setRoute} setReplans={setReplans} pathMode={pathMode} setDiscoveredObstacles={setDiscoveredObstacles} setScanCount={setScanCount}/>
             </Canvas>
             <div className={speed > 1 ? "view-mode fpv-active" : "view-mode"}>{speed > 1 ? "● DRONE FLIGHT VIEW • FULL DRONE" : "● OPERATOR VIEW • STATIONARY"}</div>
             <div className="monitor-hud"><span>ALT <b>{estimatedPosition.y.toFixed(1)}m</b></span><span>HDG <b>{heading.toFixed(0)}°</b></span><span>GPS <b>{gpsDenied?"DENIED":"CONNECTED"}</b></span></div>
