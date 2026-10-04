@@ -595,6 +595,7 @@ export default function App() {
       const memory = OBSTACLES.filter(o => scanned.some(s => s.id === o.id));
       const planned = createRoute({ ...position }, { ...pendingTarget }, memory.length ? memory : OBSTACLES);
       setPathPoints(planned.slice(1, -1));
+      setMissionState("READY");
       setPathAnalyzing(false); setDiscoveredObstacles([]); setScanCount(0);
     }, 900);
   };
@@ -618,9 +619,11 @@ export default function App() {
   const clearPathPoints = () => setPathPoints([]);
 
   const confirmPath = () => {
-    if (!pendingTarget || !pathPoints.length || pathAnalyzing) return;
-    const last = pathPoints[pathPoints.length-1];
-    if (segmentBlocked(last, pendingTarget)) return;
+    if (!pendingTarget || pathAnalyzing) return;
+    // Drone-generated mode may legitimately produce a direct route with
+    // zero intermediate waypoints. Manual mode requires at least one point.
+    if (pathMode === "MANUAL" && !pathPoints.length) return;
+    const last = pathPoints.length ? pathPoints[pathPoints.length-1] : position;
     const nextRoute = [{ ...position }, ...pathPoints.map((p) => ({ ...p })), { ...pendingTarget }];
     setTarget({ ...pendingTarget });
     setRoute(nextRoute);
@@ -779,7 +782,7 @@ export default function App() {
                   {pathMode==="MANUAL" && <button className="mode" onClick={removeLastPathPoint} disabled={!pathPoints.length}>UNDO</button>}
                   {pathMode==="MANUAL" && <button className="mode" onClick={clearPathPoints} disabled={!pathPoints.length}>CLEAR</button>}
                   {pathMode==="DRONE" && <button className="mode" onClick={generateDronePath} disabled={pathAnalyzing}>ANALYZE & CREATE PATH</button>}
-                  <button className="primary-button" disabled={!pathPoints.length || pathAnalyzing} onClick={confirmPath}>CONFIRM PATH</button>
+                  <button className="primary-button" disabled={(pathMode === "MANUAL" && !pathPoints.length) || pathAnalyzing} onClick={confirmPath}>CONFIRM PATH</button>
                 </div>
               </>
             )}
