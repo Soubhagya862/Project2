@@ -1,0 +1,1 @@
+export default function DroneSensors({position}){const rays=[[1,0,0],[-1,0,0],[0,0,1],[0,0,-1],[0,1,0]];return <group position={[position.x,position.y,position.z]}>{rays.map((r,i)=><arrowHelper key={i} args={[{x:r[0],y:r[1],z:r[2]}, {x:0,y:0,z:0},10,.08]}/>)}</group>}
