@@ -26,13 +26,16 @@ export default function PhoneController(){
   return()=>s.disconnect();
  },[]);
 
- function send(command){setLast(command);socketRef.current?.emit("phone-control",command)}
+ function send(command){
+  setLast(command);
+  if(socketRef.current?.connected){socketRef.current.emit("drone-command",command)}else{setLast("OFFLINE")}
+}
 
  function selectTarget(){
   const safe={x:Number(target.x)||0,y:Math.max(5,Number(target.y)||30),z:Number(target.z)||0};
   setTarget(safe);setConfirmed(true);setLast("TARGET");
   socketRef.current?.emit("target-sync",safe);
-  socketRef.current?.emit("phone-control","TARGET:"+JSON.stringify(safe));
+  socketRef.current?.emit("drone-command","TARGET:"+JSON.stringify(safe));
  }
 
  return <div className="phone-controller">
