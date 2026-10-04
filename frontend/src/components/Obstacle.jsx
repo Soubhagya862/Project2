@@ -1,0 +1,1 @@
+export default function Obstacle({obstacle,onClick}){const {position,size}=obstacle;return <mesh position={[position.x,position.y,position.z]} onClick={onClick}><boxGeometry args={[size.x,size.y,size.z]}/><meshStandardMaterial transparent opacity={.55}/></mesh>}
