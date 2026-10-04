@@ -208,7 +208,6 @@ function App(){
     setPath(route);idx.current=0;setSensor(false);setMode(gps?"AUTOPILOT":"EMERGENCY AUTOPILOT");setStatus(gps?"AUTOPILOT ACTIVE":"EMERGENCY AUTOPILOT");setPhase("REPLANNED SAFE ROUTE");setSpeed(50);setMessage("Obstacle avoided — new route locked");await patchMission({status:gps?"AUTOPILOT":"EMERGENCY AUTOPILOT",phase:"REPLANNED SAFE ROUTE",route});
    }catch{setStatus("REPLANNING ERROR");setMessage("Backend replan unavailable")}finally{setTimeout(()=>{replanLock.current=false},700)}
  }
- const commandHandlerRef=useRef(null);
  const hoverFlight=()=>{manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,until:0};setSpeed(0);setRemoteControl("HOVER");setStatus(flying?"HOVER":"LANDED");setPhase(flying?"HOLD POSITION":"ON GROUND");setMessage(flying?"Drone holding position":"Drone is on the ground")};
  const commandHandlerRef=useRef(null);
  commandHandlerRef.current=async cmd=>{
