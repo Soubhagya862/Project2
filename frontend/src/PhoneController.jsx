@@ -18,6 +18,8 @@ export default function PhoneController(){
  const joystickActiveRef=useRef(false);
  const joystickVectorRef=useRef({x:0,y:0});
  const joystickTimerRef=useRef(null);
+ const buttonTimerRef=useRef(null);
+ const buttonCommandRef=useRef("");
  const lastJoystickCommandRef=useRef("");
  const targetPendingRef=useRef(false);
  const keyboardRef=useRef(new Set());
@@ -78,6 +80,20 @@ export default function PhoneController(){
   }
   if(mode==="AUTOPILOT")send("AUTOPILOT");
   if(mode==="EMERGENCY")send("EMERGENCY");
+ }
+
+ function startButtonControl(command){
+  clearInterval(buttonTimerRef.current);
+  buttonCommandRef.current=command;
+  send(command);
+  buttonTimerRef.current=setInterval(()=>send(buttonCommandRef.current),120);
+ }
+
+ function endButtonControl(){
+  clearInterval(buttonTimerRef.current);
+  buttonTimerRef.current=null;
+  buttonCommandRef.current="";
+  send("HOVER");
  }
 
  function joystickCommand(x,y){
@@ -149,7 +165,10 @@ export default function PhoneController(){
   };
  },[]);
 
- useEffect(()=>()=>clearInterval(joystickTimerRef.current),[]);
+ useEffect(()=>()=>{
+  clearInterval(joystickTimerRef.current);
+  clearInterval(buttonTimerRef.current);
+ },[]);
 
  const droneLeft=50+Math.max(-46,Math.min(46,Number(telemetry.x||0)/30));
  const droneTop=50+Math.max(-40,Math.min(40,Number(telemetry.z||0)/30));
@@ -232,6 +251,21 @@ export default function PhoneController(){
      <div className="key-row"><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd></div>
      <div className="key-row"><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
      <p>W/S MOVE FORWARD/BACK<br/>A/D MOVE LEFT/RIGHT<br/>Q/E YAW · ↑/↓ ALTITUDE</p>
+    </div>
+
+    <div className="bottom-flight-controls">
+     <div className="bottom-control-title">DIRECT DRONE MOVEMENT — HOLD BUTTON</div>
+     <div className="bottom-control-grid">
+      <button onPointerDown={e=>{e.preventDefault();startButtonControl("YAW_LEFT")}} onPointerUp={endButtonControl} onPointerCancel={endButtonControl}>↶<small>YAW L</small></button>
+      <button onPointerDown={e=>{e.preventDefault();startButtonControl("ASCEND")}} onPointerUp={endButtonControl} onPointerCancel={endButtonControl}>↑<small>UP</small></button>
+      <button onPointerDown={e=>{e.preventDefault();startButtonControl("YAW_RIGHT")}} onPointerUp={endButtonControl} onPointerCancel={endButtonControl}>↷<small>YAW R</small></button>
+      <button onPointerDown={e=>{e.preventDefault();startButtonControl("LEFT")}} onPointerUp={endButtonControl} onPointerCancel={endButtonControl}>←<small>LEFT</small></button>
+      <button className="forward" onPointerDown={e=>{e.preventDefault();startButtonControl("UP")}} onPointerUp={endButtonControl} onPointerCancel={endButtonControl}>▲<small>FORWARD</small></button>
+      <button onPointerDown={e=>{e.preventDefault();startButtonControl("RIGHT")}} onPointerUp={endButtonControl} onPointerCancel={endButtonControl}>→<small>RIGHT</small></button>
+      <button onPointerDown={e=>{e.preventDefault();startButtonControl("DESCEND")}} onPointerUp={endButtonControl} onPointerCancel={endButtonControl}>↓<small>DOWN</small></button>
+      <button onClick={()=>send("HOVER")}>●<small>HOVER</small></button>
+      <button onPointerDown={e=>{e.preventDefault();startButtonControl("DOWN")}} onPointerUp={endButtonControl} onPointerCancel={endButtonControl}>▼<small>BACK</small></button>
+     </div>
     </div>
 
     <div className="telemetry-card">
