@@ -9,957 +9,298 @@ import DroneSensors from "./components/DroneSensors";
 
 const API=import.meta.env.VITE_API_URL||"http://localhost:5000/api";
 const SOCKET_URL=import.meta.env.VITE_SOCKET_URL||"http://localhost:5000";
-const HOME={x:0,y:10,z:0};
+const HOME={x:0,y:12,z:0};
+const WORLD={minX:-90,maxX:90,minY:2,maxY:70,minZ:-65,maxZ:65};
 
-const baseObstacles=[
-  {position:{x:24,y:4,z:8},size:{x:7,y:8,z:7},type:"ROCK"},
-  {position:{x:42,y:3,z:-8},size:{x:6,y:6,z:6},type:"TREE"},
-  {position:{x:58,y:5,z:14},size:{x:10,y:10,z:5},type:"WALL"},
-  {position:{x:35,y:2.5,z:25},size:{x:5,y:5,z:5},type:"POLE"},
-  {position:{x:70,y:4,z:-22},size:{x:8,y:8,z:8},type:"DEBRIS"}
+const BASE_OBSTACLES=[
+ {id:"rock-1",position:{x:22,y:4,z:8},size:{x:8,y:8,z:8},type:"ROCK"},
+ {id:"tree-1",position:{x:38,y:8,z:-10},size:{x:7,y:16,z:7},type:"TREE"},
+ {id:"wall-1",position:{x:55,y:7,z:15},size:{x:18,y:14,z:3},type:"WALL"},
+ {id:"pole-1",position:{x:48,y:7,z:28},size:{x:3,y:14,z:3},type:"POLE"},
+ {id:"debris-1",position:{x:68,y:5,z:-23},size:{x:11,y:10,z:9},type:"DEBRIS"},
+ {id:"rock-2",position:{x:78,y:5,z:25},size:{x:10,y:10,z:10},type:"ROCK"}
 ];
 
-function DroneModel({p,heading}){
-  const group=useRef();
-
-  useFrame((_,d)=>{
-    if(group.current){
-      group.current.rotation.y=THREE.MathUtils.lerp(
-        group.current.rotation.y,
-        -heading*Math.PI/180,
-        d*7
-      );
-    }
-  });
-
-  return <group ref={group} position={[p.x,p.y,p.z]}>
-    <mesh castShadow>
-      <boxGeometry args={[3,.65,2.2]}/>
-      <meshStandardMaterial metalness={.75} roughness={.25}/>
-    </mesh>
-
-    <mesh position={[0,.35,0]}>
-      <sphereGeometry args={[.45,20,12]}/>
-      <meshStandardMaterial metalness={.8} roughness={.15}/>
-    </mesh>
-
-    <mesh position={[0,-.55,0]}>
-      <sphereGeometry args={[.3,16,10]}/>
-      <meshStandardMaterial/>
-    </mesh>
-
-    {[[-2,.55,-1.25],[2,.55,-1.25],[-2,.55,1.25],[2,.55,1.25]].map(([x,y,z],i)=>
-      <group key={i} position={[x,0,z]}>
-        <mesh>
-          <cylinderGeometry args={[.12,.16,.45,16]}/>
-          <meshStandardMaterial metalness={.8}/>
-        </mesh>
-        <mesh position={[0,.28,0]} rotation={[0,0,Math.PI/2]}>
-          <boxGeometry args={[1.8,.07,.12]}/>
-          <meshStandardMaterial/>
-        </mesh>
-      </group>
-    )}
-
-    <mesh position={[0,-.35,-1.05]} rotation={[Math.PI/2,0,0]}>
-      <cylinderGeometry args={[.38,.38,.18,24]}/>
-      <meshStandardMaterial/>
-    </mesh>
-
-    <pointLight position={[0,-.7,-1.2]} intensity={2} distance={7}/>
-  </group>;
+function Terrain(){
+ const patches=useMemo(()=>Array.from({length:28},(_,i)=>({
+   x:-85+(i*37)%170,z:-58+(i*53)%116,s:4+(i%5)*2,r:(i*37)%360
+ })),[]);
+ return <group>
+   <mesh rotation={[-Math.PI/2,0,0]} receiveShadow>
+     <planeGeometry args={[220,160,1,1]}/>
+     <meshStandardMaterial color="#253828" roughness={1}/>
+   </mesh>
+   {patches.map((p,i)=><mesh key={i} position={[p.x,.04,p.z]} rotation={[-Math.PI/2,0,p.r*Math.PI/180]}>
+     <circleGeometry args={[p.s,12]}/>
+     <meshStandardMaterial color={i%2?"#31482f":"#3a5135"} roughness={1}/>
+   </mesh>)}
+   <Grid args={[220,160]} position={[0,.08,0]} sectionSize={10} cellSize={2} fadeDistance={130} fadeStrength={1}/>
+ </group>;
 }
 
-function Obstacle({o,dynamic=false}){
-  return <mesh position={[o.position.x,o.position.y,o.position.z]} castShadow>
-    <boxGeometry args={[o.size.x,o.size.y,o.size.z]}/>
-    <meshStandardMaterial
-      transparent
-      opacity={dynamic?.75:.42}
-      metalness={.15}
-      roughness={.6}
-      emissive={dynamic?new THREE.Color("#ff2f55"):new THREE.Color("#172b4d")}
-      emissiveIntensity={dynamic?.65:.2}
-    />
-  </mesh>;
+function Tree({o}){
+ return <group position={[o.position.x,0,o.position.z]}>
+   <mesh position={[0,o.size.y*.28,0]} castShadow><cylinderGeometry args={[.7,.9,o.size.y*.55,10]}/><meshStandardMaterial color="#5b3925" roughness={1}/></mesh>
+   <mesh position={[0,o.size.y*.58,0]} castShadow><coneGeometry args={[o.size.x*.8,o.size.y*.75,12]}/><meshStandardMaterial color="#244d2a" roughness={1}/></mesh>
+   <mesh position={[0,o.size.y*.78,0]} castShadow><coneGeometry args={[o.size.x*.62,o.size.y*.55,12]}/><meshStandardMaterial color="#326237" roughness={1}/></mesh>
+ </group>;
 }
 
-function DynamicObject({o}){
-  return <group position={[o.position.x,o.position.y,o.position.z]}>
-    <mesh>
-      <boxGeometry args={[o.size.x,o.size.y,o.size.z]}/>
-      <meshStandardMaterial
-        transparent
-        opacity={.7}
-        emissive={new THREE.Color("#ff304f")}
-        emissiveIntensity={1}
-      />
-    </mesh>
-    <pointLight intensity={2} distance={8}/>
-  </group>;
+function Rock({o}){
+ return <mesh position={[o.position.x,o.position.y*.45,o.position.z]} scale={[1,.75,1]} rotation={[.1,.4,.08]} castShadow>
+   <dodecahedronGeometry args={[o.size.x*.55,1]}/><meshStandardMaterial color="#77736b" roughness={.95}/>
+ </mesh>;
+}
+
+function Wall({o}){
+ return <mesh position={[o.position.x,o.position.y,o.position.z]} castShadow>
+   <boxGeometry args={[o.size.x,o.size.y,o.size.z]}/><meshStandardMaterial color="#8b8476" roughness={.9}/>
+ </mesh>;
+}
+
+function Pole({o}){
+ return <group position={[o.position.x,0,o.position.z]}>
+   <mesh position={[0,o.size.y/2,0]} castShadow><cylinderGeometry args={[.35,.45,o.size.y,12]}/><meshStandardMaterial color="#555a5c" metalness={.4}/></mesh>
+   <mesh position={[0,o.size.y*.88,0]}><boxGeometry args={[5,.3,.3]}/><meshStandardMaterial color="#4d5254" metalness={.5}/></mesh>
+ </group>;
+}
+
+function Debris({o,dynamic=false}){
+ return <group position={[o.position.x,o.position.y*.35,o.position.z]}>
+   {[0,1,2].map(i=><mesh key={i} position={[(i-1)*2,0,(i%2)*2-1]} rotation={[i*.5,i*.8,.2]} castShadow>
+     <boxGeometry args={[o.size.x*.45,o.size.y*.55,o.size.z*.35]}/><meshStandardMaterial color={dynamic?"#b43b32":"#65584d"} roughness={.9}/>
+   </mesh>)}
+ </group>;
+}
+
+function ObstacleView({o}){
+ if(o.type==="TREE")return <Tree o={o}/>;
+ if(o.type==="ROCK")return <Rock o={o}/>;
+ if(o.type==="WALL")return <Wall o={o}/>;
+ if(o.type==="POLE")return <Pole o={o}/>;
+ return <Debris o={o} dynamic={o.type==="DYNAMIC"}/>;
+}
+
+function DroneModel({position,heading}){
+ const ref=useRef();
+ const propRefs=useRef([]);
+ useFrame((state,delta)=>{
+   if(!ref.current)return;
+   const a=heading*Math.PI/180;
+   ref.current.rotation.y=THREE.MathUtils.lerp(ref.current.rotation.y,-a,delta*8);
+   propRefs.current.forEach(r=>{if(r)r.rotation.y+=delta*32;});
+ });
+ return <group ref={ref} position={[position.x,position.y,position.z]}>
+   <mesh castShadow><boxGeometry args={[3.8,.7,2.6]}/><meshStandardMaterial color="#242b31" metalness={.85} roughness={.22}/></mesh>
+   <mesh position={[0,.25,0]}><sphereGeometry args={[.48,24,16]}/><meshStandardMaterial color="#111820" metalness={.9}/></mesh>
+   <mesh position={[0,-.42,-1.05]} rotation={[Math.PI/2,0,0]}><cylinderGeometry args={[.42,.42,.16,24]}/><meshStandardMaterial color="#111820" metalness={.7}/></mesh>
+   {[[-2,.55,-1.25],[2,.55,-1.25],[-2,.55,1.25],[2,.55,1.25]].map(([x,y,z],i)=>
+    <group key={i} position={[x,0,z]}>
+      <mesh><cylinderGeometry args={[.13,.17,.55,12]}/><meshStandardMaterial color="#30383e" metalness={.8}/></mesh>
+      <mesh ref={el=>propRefs.current[i]=el} position={[0,.35,0]}><boxGeometry args={[2,.06,.12]}/><meshStandardMaterial color="#0d1115" metalness={.7}/></mesh>
+    </group>)}
+   <pointLight position={[0,-.65,-1.25]} intensity={3} distance={10} color="#59e7ff"/>
+ </group>;
 }
 
 function DroneCamera({position,heading}){
-  const {camera}=useThree();
-  const initialized=useRef(false);
-
-  useFrame((_,delta)=>{
-    const a=heading*Math.PI/180;
-    const desired=new THREE.Vector3(
-      position.x-Math.cos(a)*55,
-      position.y+28,
-      position.z-Math.sin(a)*55
-    );
-    const look=new THREE.Vector3(
-      position.x+Math.cos(a)*75,
-      position.y-4,
-      position.z+Math.sin(a)*75
-    );
-
-    if(!initialized.current){
-      camera.position.copy(desired);
-      initialized.current=true;
-    }else{
-      camera.position.lerp(
-        desired,
-        1-Math.pow(0.0005,Math.min(delta,0.05))
-      );
-    }
-
-    camera.lookAt(look);
-  });
-
-  return null;
+ const {camera}=useThree(); const init=useRef(false);
+ useFrame((_,delta)=>{
+   const a=heading*Math.PI/180;
+   const behind=new THREE.Vector3(position.x-Math.cos(a)*20,position.y+9,position.z-Math.sin(a)*20);
+   const look=new THREE.Vector3(position.x+Math.cos(a)*18,position.y-1,position.z+Math.sin(a)*18);
+   if(!init.current){camera.position.copy(behind);init.current=true;}
+   camera.position.lerp(behind,1-Math.pow(.001,Math.min(delta,.05)));
+   camera.lookAt(look);
+ });
+ return null;
 }
 
-function Route({path}){
-  const points=useMemo(
-    ()=>path.map(p=>[p.x,p.y,p.z]),
-    [path]
-  );
-
-  if(points.length<2)return null;
-
-  return <Line points={points} color="#55e7ff" lineWidth={3}/>;
+function Route({path,returning}){
+ const points=useMemo(()=>path.map(p=>[p.x,p.y+.15,p.z]),[path]);
+ return points.length>1?<Line points={points} color={returning?"#ffd34d":"#39e7ff"} lineWidth={4}/>:null;
 }
 
-function TargetMarker({target}){
-  return <group position={[target.x,target.y,target.z]}>
-    <mesh>
-      <sphereGeometry args={[1.5,24,16]}/>
-      <meshStandardMaterial
-        emissive={new THREE.Color("#43ff9a")}
-        emissiveIntensity={2}
-      />
-    </mesh>
-
-    <mesh rotation={[Math.PI/2,0,0]}>
-      <torusGeometry args={[3,.08,12,48]}/>
-      <meshStandardMaterial
-        emissive={new THREE.Color("#43ff9a")}
-        emissiveIntensity={1.5}
-      />
-    </mesh>
-  </group>;
+function TargetMarker({target,home=false}){
+ return <group position={[target.x,target.y,target.z]}>
+  <mesh><cylinderGeometry args={[2.2,2.2,.18,32]}/><meshStandardMaterial color={home?"#4d8cff":"#4dff9a"} emissive={new THREE.Color(home?"#1644aa":"#0d8c4c")} emissiveIntensity={1.5}/></mesh>
+  <mesh position={[0,1,0]}><sphereGeometry args={[.6,20,12]}/><meshStandardMaterial emissive={new THREE.Color(home?"#4d8cff":"#4dff9a")} emissiveIntensity={2}/></mesh>
+ </group>;
 }
 
 function App(){
-  const socketRef=useRef(null);
-  const idx=useRef(0);
-  const returningRef=useRef(false);
-  const replanLock=useRef(false);
-  const startRef=useRef(null);
-  const stopRef=useRef(null);
-  const disconnectRef=useRef(null);
-  const pathRef=useRef([]);
-  const audioRef=useRef(null);
-
-  const [phoneCommand,setPhoneCommand]=useState("STOP");
-  const [phoneConnected,setPhoneConnected]=useState(false);
-  const [pos,setPos]=useState({...HOME});
-  const [target,setTarget]=useState({x:65,y:12,z:0});
-  const [path,setPath]=useState([]);
-  const [gps,setGps]=useState(true);
-  const [auto,setAuto]=useState(false);
-  const [status,setStatus]=useState("READY");
-  const [phase,setPhase]=useState("IDLE");
-  const [speed,setSpeed]=useState(0);
-  const [heading,setHeading]=useState(0);
-  const [mission,setMission]=useState(null);
-  const [sensor,setSensor]=useState(false);
-  const [sensorDistance,setSensorDistance]=useState(12);
-  const [message,setMessage]=useState("System ready");
-  const [obstacles,setObstacles]=useState(baseObstacles);
-
-  pathRef.current=path;
-
-  function takeoffSound(){
-    try{
-      const C=window.AudioContext||window.webkitAudioContext;
-      if(!C)return;
-
-      const ctx=audioRef.current||new C();
-      audioRef.current=ctx;
-
-      const now=ctx.currentTime;
-
-      [0,1,2,3].forEach(i=>{
-        const osc=ctx.createOscillator();
-        const gain=ctx.createGain();
-
-        osc.type="sawtooth";
-        osc.frequency.setValueAtTime(90+i*20,now);
-        osc.frequency.exponentialRampToValueAtTime(180+i*35,now+.9);
-
-        gain.gain.setValueAtTime(.0001,now);
-        gain.gain.exponentialRampToValueAtTime(.06,now+.12);
-        gain.gain.exponentialRampToValueAtTime(.0001,now+1.1);
-
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now+i*.03);
-        osc.stop(now+1.15);
-      });
-    }catch{}
-  }
-
-  async function patchMission(data){
-    if(!mission?._id)return;
-
-    try{
-      await fetch(
-        API+`/missions/${mission._id}`,
-        {
-          method:"PATCH",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify(data)
-        }
-      );
-    }catch{}
-  }
-
-  async function calculate(from=pos,to=target){
-    try{
-      const r=await fetch(
-        API+"/routes/calculate",
-        {
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({
-            start:from,
-            goal:to,
-            obstacles
-          })
-        }
-      );
-
-      if(!r.ok)throw new Error();
-
-      const d=await r.json();
-      const route=d.route||[];
-
-      setPath(route);
-      idx.current=0;
-      setMessage(
-        route.length
-          ?"3D A* route calculated"
-          :"No safe route found"
-      );
-
-      return route;
-    }catch{
-      setPath([]);
-      setMessage("Backend unavailable — start backend on port 5000");
-      return [];
-    }
-  }
-
-  async function create(){
-    const p=await calculate();
-
-    if(!p.length)return;
-
-    try{
-      const r=await fetch(
-        API+"/missions",
-        {
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({
-            start:HOME,
-            target,
-            route:p,
-            gpsStatus:gps?"CONNECTED":"DENIED",
-            status:"READY",
-            phase:"PLANNED"
-          })
-        }
-      );
-
-      if(!r.ok)throw new Error();
-
-      const m=await r.json();
-      setMission(m);
-      setStatus("MISSION CREATED");
-      setPhase("PLANNED");
-      setMessage("Mission saved");
-    }catch{
-      setMessage("Mission save failed — check MongoDB/backend");
-    }
-  }
-
-  async function start(){
-    if(!path.length){
-      setMessage("Select a target and calculate a route first");
-      return;
-    }
-
-    takeoffSound();
-    returningRef.current=false;
-    setAuto(true);
-
-    const s=gps?"AUTONOMOUS":"EMERGENCY AUTOPILOT";
-
-    setStatus(s);
-    setPhase(
-      gps
-        ?"TAKEOFF / NAVIGATING"
-        :"GPS-DENIED NAVIGATION"
-    );
-    setMessage("Rotor spin-up — autonomous flight active");
-
-    await patchMission({
-      status:s,
-      phase:gps
-        ?"TAKEOFF / NAVIGATING"
-        :"GPS-DENIED NAVIGATION",
-      gpsStatus:gps?"CONNECTED":"DENIED"
-    });
-  }
-
-  async function stop(){
-    setAuto(false);
-    setSpeed(0);
-    setStatus("STOPPED");
-    setPhase("MANUAL");
-    setMessage("Mission paused");
-
-    await patchMission({
-      status:"STOPPED",
-      phase:"MANUAL"
-    });
-  }
-
-  async function addObstacle(){
-    const next=path[idx.current]||{
-      x:pos.x+7,
-      y:pos.y,
-      z:pos.z
-    };
-
-    const o={
-      position:{x:next.x,y:next.y,z:next.z},
-      size:{x:5,y:7,z:5},
-      type:"DYNAMIC"
-    };
-
-    setObstacles(v=>[...v,o]);
-    setSensor(true);
-    setMessage("LIVE DYNAMIC OBSTACLE DETECTED");
-
-    if(mission?._id){
-      fetch(
-        API+"/obstacles",
-        {
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({
-            ...o,
-            missionId:mission._id
-          })
-        }
-      ).catch(()=>{});
-    }
-  }
-
-  function blocked(n){
-    return obstacles.some(o=>
-      Math.abs(n.x-o.position.x)<o.size.x/2+2 &&
-      Math.abs(n.y-o.position.y)<o.size.y/2+2 &&
-      Math.abs(n.z-o.position.z)<o.size.z/2+2
-    );
-  }
-
-  async function replan(){
-    if(replanLock.current)return;
-
-    replanLock.current=true;
-    setAuto(false);
-    setSpeed(0);
-    setSensor(true);
-    setStatus("OBSTACLE DETECTED");
-    setPhase("REAL-TIME REPLANNING");
-    setMessage("Sensor lock — recalculating safe 3D route");
-
-    const p=await calculate(pos,target);
-
-    if(!p.length){
-      setStatus("ROUTE BLOCKED");
-      setPhase("WAITING FOR CLEAR PATH");
-      setMessage("No safe route. Hold position.");
-      replanLock.current=false;
-      return;
-    }
-
-    idx.current=0;
-    setPath(p);
-    setSensor(false);
-    setAuto(true);
-    setStatus(gps?"AUTONOMOUS":"EMERGENCY AUTOPILOT");
-    setPhase("REPLANNED NAVIGATION");
-    setMessage("New safe route locked");
-
-    await patchMission({
-      status:gps?"AUTONOMOUS":"EMERGENCY AUTOPILOT",
-      phase:"REPLANNED NAVIGATION",
-      route:p
-    });
-
-    setTimeout(()=>{
-      replanLock.current=false;
-    },1200);
-  }
-
-  const disconnect=async()=>{
-    const next=!gps;
-    setGps(next);
-
-    if(!next){
-      setStatus("EMERGENCY AUTOPILOT");
-      setPhase("GPS DENIED");
-      setMessage("GPS lost — switching to onboard sensor navigation");
-
-      await patchMission({
-        gpsStatus:"DENIED",
-        status:"EMERGENCY AUTOPILOT",
-        phase:"GPS DENIED"
-      });
-    }else{
-      setStatus("READY");
-      setPhase("GPS RESTORED");
-      setMessage("GPS restored");
-
-      await patchMission({
-        gpsStatus:"CONNECTED",
-        status:"READY",
-        phase:"GPS RESTORED"
-      });
-    }
-  };
-
-  function manualMove(cmd){
-    setAuto(false);
-    setSpeed(6);
-
-    const step=1.8;
-
-    const map={
-      UP:[0,step],
-      DOWN:[0,-step],
-      LEFT:[-step,0],
-      RIGHT:[step,0],
-      UP_LEFT:[-step,step],
-      UP_RIGHT:[step,step],
-      DOWN_LEFT:[-step,-step],
-      DOWN_RIGHT:[step,-step]
-    };
-
-    const [dx,dz]=map[cmd]||[0,0];
-
-    setHeading(
-      Math.atan2(dz,dx)*180/Math.PI
-    );
-
-    setPos(p=>({
-      x:THREE.MathUtils.clamp(p.x+dx,-45,75),
-      y:p.y,
-      z:THREE.MathUtils.clamp(p.z+dz,-45,45)
-    }));
-
-    setStatus("MANUAL FLIGHT");
-    setPhase(cmd.replace("_"," + "));
-    setMessage("Manual controller: "+cmd);
-  }
-
-  startRef.current=start;
-  stopRef.current=stop;
-  disconnectRef.current=disconnect;
-
-  useEffect(()=>{
-    const s=io(SOCKET_URL);
-    socketRef.current=s;
-
-    s.on("connect",()=>{
-      setPhoneConnected(true);
-    });
-
-    s.on("disconnect",()=>{
-      setPhoneConnected(false);
-    });
-
-    s.on("phone-control",cmd=>{
-      setPhoneCommand(cmd);
-
-      if(cmd==="START"){
-        startRef.current?.();
-      }else if(cmd==="STOP"){
-        stopRef.current?.();
-      }else if(cmd==="GPS_TOGGLE"){
-        disconnectRef.current?.();
-      }else if(cmd==="EMERGENCY"){
-        setGps(false);
-
-        if(pathRef.current.length){
-          setAuto(true);
-          setStatus("EMERGENCY AUTOPILOT");
-          setPhase("PHONE EMERGENCY CONTROL");
-          setMessage("Emergency autopilot activated from remote");
-        }else{
-          setMessage("Calculate a route before emergency mode");
-        }
-      }else{
-        manualMove(cmd);
-      }
-    });
-
-    return()=>s.disconnect();
-  },[]);
-
-  useEffect(()=>{
-    if(!auto)return;
-
-    const timer=setInterval(async()=>{
-      const n=path[idx.current];
-
-      if(!n){
-        setAuto(false);
-        setSpeed(0);
-
-        if(returningRef.current){
-          setStatus("MISSION COMPLETE");
-          setPhase("HOME LANDED");
-          setMessage("Mission complete — returned to home");
-
-          await patchMission({
-            status:"MISSION COMPLETE",
-            phase:"HOME LANDED",
-            completedAt:new Date().toISOString()
-          });
-        }else{
-          setStatus("TARGET REACHED");
-          setPhase("LANDING");
-          setMessage("Target reached — landing");
-        }
-
-        return;
-      }
-
-      if(blocked(n)){
-        await replan();
-        return;
-      }
-
-      const prev=pos;
-
-      setHeading(
-        Math.atan2(
-          n.z-prev.z,
-          n.x-prev.x
-        )*180/Math.PI
-      );
-
-      setPos(n);
-      setSpeed(12);
-      idx.current++;
-    },220);
-
-    return()=>clearInterval(timer);
-  },[auto,path,obstacles,gps,pos]);
-
-  useEffect(()=>{
-    if(status!=="TARGET REACHED")return;
-
-    const timer=setTimeout(async()=>{
-      setStatus("LANDED");
-      setPhase("WAITING 10s");
-      setSpeed(0);
-
-      await patchMission({
-        status:"LANDED",
-        phase:"WAITING 10s"
-      });
-
-      await new Promise(r=>setTimeout(r,10000));
-
-      returningRef.current=true;
-
-      const p=await calculate(pos,HOME);
-
-      if(!p.length){
-        setStatus("RETURN ROUTE BLOCKED");
-        setPhase("RETURN FAILED");
-        return;
-      }
-
-      idx.current=0;
-      setPath(p);
-      setAuto(true);
-      setStatus("RETURNING HOME");
-      setPhase("RETURN TO HOME");
-      setMessage("Waiting complete — return flight started");
-
-      await patchMission({
-        status:"RETURNING HOME",
-        phase:"RETURN TO HOME",
-        route:p
-      });
-    },1000);
-
-    return()=>clearTimeout(timer);
-  },[status]);
-
-  useEffect(()=>{
-    if(!mission?._id)return;
-
-    const timer=setInterval(()=>{
-      fetch(
-        API+"/telemetry",
-        {
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({
-            missionId:mission._id,
-            position:pos,
-            altitude:pos.y,
-            speed,
-            heading,
-            gpsStatus:gps?"CONNECTED":"DENIED",
-            obstacleDetected:sensor,
-            sensorDistance
-          })
-        }
-      ).catch(()=>{});
-
-      socketRef.current?.emit(
-        "phone-telemetry",
-        {
-          x:pos.x,
-          y:pos.y,
-          z:pos.z,
-          speed,
-          heading,
-          gps:gps?"CONNECTED":"DENIED",
-          status,
-          phase,
-          target
-        }
-      );
-    },500);
-
-    return()=>clearInterval(timer);
-  },[
-    mission,
-    pos,
-    speed,
-    heading,
-    gps,
-    sensor,
-    sensorDistance,
-    status,
-    phase,
-    target
-  ]);
-
-  const distance=Math.hypot(
-    pos.x-target.x,
-    pos.y-target.y,
-    pos.z-target.z
-  );
-
-  return <div className="app">
-    <header className="topbar">
-      <div>
-        <h1>NAVIGATE-X <span>◈</span></h1>
-        <p>3D GPS-DENIED AUTONOMOUS FLIGHT LAB</p>
-      </div>
-
-      <div className="top-status">
-        <span className={gps?"ok":"danger"}>
-          ● GPS {gps?"LOCK":"DENIED"}
-        </span>
-
-        <span className={phoneConnected?"ok":"danger"}>
-          ● REMOTE {phoneConnected?"LINKED":"OFFLINE"}
-        </span>
-      </div>
-    </header>
-
-    <main className="sim-layout">
-      <section
-        className="scene"
-        onContextMenu={e=>e.preventDefault()}
-      >
-        <Canvas
-          shadows
-          camera={{position:[0,36,55],fov:58}}
-          gl={{antialias:true}}
-          style={{touchAction:"none"}}
-        >
-          <color attach="background" args={["#030914"]}/>
-          <fog attach="fog" args={["#030914",70,150]}/>
-
-          <ambientLight intensity={.65}/>
-          <directionalLight
-            castShadow
-            position={[20,80,20]}
-            intensity={2.2}
-          />
-          <pointLight
-            position={[-30,25,-20]}
-            intensity={20}
-            distance={80}
-          />
-
-          <Grid
-            args={[140,100]}
-            position={[0,0,0]}
-            sectionSize={5}
-            cellSize={1}
-            fadeDistance={100}
-            fadeStrength={1}
-          />
-
-          {obstacles.map((o,i)=>
-            o.type==="DYNAMIC"
-              ?<DynamicObject key={i} o={o}/>
-              :<Obstacle key={i} o={o}/>
-          )}
-
-          <DroneModel
-            p={pos}
-            heading={heading}
-          />
-
-          <DroneSensors
-            position={pos}
-            obstacles={obstacles}
-            range={14}
-            onDetection={({detected,distance:front})=>{
-              setSensor(detected);
-              setSensorDistance(front);
-
-              if(detected&&front<3.5&&auto){
-                replan();
-              }
-            }}
-          />
-
-          <Route path={path}/>
-
-          <TargetMarker target={target}/>
-
-          <DroneCamera
-            position={pos}
-            heading={heading}
-          />
-        </Canvas>
-
-        <div className="flight-hud">
-          <div className="hud-title">
-            LIVE FLIGHT VIEW
-            <span className="pulse">● LIVE</span>
-          </div>
-
-          <div className="hud-row">
-            <b>{status}</b>
-            <span>ALT {pos.y.toFixed(1)}m</span>
-            <span>SPD {speed.toFixed(1)}m/s</span>
-            <span>HDG {heading.toFixed(0)}°</span>
-          </div>
-
-          <div className="hud-row muted">
-            POSITION {pos.x.toFixed(1)} / {pos.y.toFixed(1)} / {pos.z.toFixed(1)}
-            {" · "}
-            TARGET {target.x} / {target.y} / {target.z}
-          </div>
-        </div>
-
-        <div className="view-switch">
-          <span className="active">
-            AUTONOMOUS CHASE CAMERA · LOCKED
-          </span>
-        </div>
-
-        <div className="mini-monitor">
-          <div className="mini-title">MISSION RADAR</div>
-
-          <div className="radar">
-            <div
-              className="radar-drone"
-              style={{
-                left:`${50+pos.x*.45}%`,
-                top:`${50+pos.z*.45}%`
-              }}
-            >
-              ◆
-            </div>
-
-            <div
-              className="radar-target"
-              style={{
-                left:`${50+target.x*.45}%`,
-                top:`${50+target.z*.45}%`
-              }}
-            >
-              ✦
-            </div>
-          </div>
-
-          <small>D = DRONE · T = TARGET</small>
-        </div>
-      </section>
-
-      <aside className="control-panel">
-        <div className="panel-heading">
-          <span>MISSION CONTROL</span>
-          <small>REMOTE + AUTONOMOUS</small>
-        </div>
-
-        <div className="target-box">
-          <div className="section-label">TARGET LOCATION</div>
-
-          <div className="coord-grid">
-            <label>
-              X
-              <input
-                type="number"
-                value={target.x}
-                onChange={e=>
-                  setTarget({
-                    ...target,
-                    x:+e.target.value
-                  })
-                }
-              />
-            </label>
-
-            <label>
-              ALT
-              <input
-                type="number"
-                value={target.y}
-                onChange={e=>
-                  setTarget({
-                    ...target,
-                    y:Math.max(2,+e.target.value)
-                  })
-                }
-              />
-            </label>
-
-            <label>
-              Z
-              <input
-                type="number"
-                value={target.z}
-                onChange={e=>
-                  setTarget({
-                    ...target,
-                    z:+e.target.value
-                  })
-                }
-              />
-            </label>
-          </div>
-
-          <p className="hint">
-            Camera locked. The environment is frozen; only the drone follows the calculated route.
-          </p>
-        </div>
-
-        <div className="button-grid">
-          <button onClick={()=>calculate()}>
-            CALCULATE 3D A*
-          </button>
-
-          <button onClick={create}>
-            CREATE MISSION
-          </button>
-
-          <button
-            className="primary"
-            onClick={start}
-          >
-            TAKEOFF / START
-          </button>
-
-          <button onClick={stop}>
-            STOP / LAND
-          </button>
-
-          <button
-            className="warning"
-            onClick={addObstacle}
-          >
-            ＋ LIVE OBSTACLE
-          </button>
-
-          <button
-            className="warning"
-            onClick={disconnect}
-          >
-            {gps?"GPS DISCONNECT":"GPS RESTORE"}
-          </button>
-        </div>
-
-        <div className="manual-box">
-          <div className="section-label">FLIGHT VIEW LOCK</div>
-          <div className="hint">
-            MOUSE / TOUCH CAMERA CONTROL: DISABLED
-          </div>
-          <div className="hint">
-            WORLD: FROZEN · DRONE: AUTONOMOUS
-          </div>
-        </div>
-
-        <MissionMonitor
-          status={status}
-          phase={phase}
-          gps={gps}
-          waypoints={path.length}
-          missionId={mission?._id}
-          phoneCommand={phoneCommand}
-          phoneConnected={phoneConnected}
-          sensor={sensor}
-        />
-
-        <TelemetryPanel
-          data={{
-            ...pos,
-            altitude:pos.y,
-            speed,
-            distance,
-            heading,
-            sensorDistance
-          }}
-        />
-
-        <div className="message">
-          {message}
-        </div>
-      </aside>
-    </main>
-  </div>;
+ const socketRef=useRef(null),idx=useRef(0),pathRef=useRef([]),missionRef=useRef(null),replanLock=useRef(false),returning=useRef(false);
+ const [pos,setPos]=useState({...HOME}),[target,setTarget]=useState({x:65,y:16,z:0}),[path,setPath]=useState([]);
+ const [obstacles,setObstacles]=useState(BASE_OBSTACLES),[gps,setGps]=useState(true),[mode,setMode]=useState("MANUAL");
+ const [status,setStatus]=useState("READY"),[phase,setPhase]=useState("IDLE"),[speed,setSpeed]=useState(0),[heading,setHeading]=useState(0);
+ const [mission,setMission]=useState(null),[sensor,setSensor]=useState(false),[sensorDistance,setSensorDistance]=useState(14),[message,setMessage]=useState("Choose a destination to begin");
+ const [phoneConnected,setPhoneConnected]=useState(false),[phoneCommand,setPhoneCommand]=useState("STOP"),[destinationChosen,setDestinationChosen]=useState(false),[landing,setLanding]=useState(false);
+ pathRef.current=path; missionRef.current=mission;
+
+ const patchMission=async data=>{if(!missionRef.current?._id)return;try{await fetch(API+`/missions/${missionRef.current._id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)})}catch{}};
+
+ const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
+ const isBlocked=p=>obstacles.some(o=>Math.abs(p.x-o.position.x)<o.size.x/2+2.5&&Math.abs(p.y-o.position.y)<o.size.y/2+2.5&&Math.abs(p.z-o.position.z)<o.size.z/2+2.5);
+
+ async function calculate(from=pos,to=target){
+   try{
+    const r=await fetch(API+"/routes/calculate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({start:from,goal:to,obstacles})});
+    if(!r.ok)throw Error();
+    const d=await r.json(),route=d.route||[];
+    setPath(route);idx.current=0;
+    setMessage(route.length?"Safe 3D A* route calculated":"No safe route found");
+    return route;
+   }catch{setPath([]);setMessage("Route server unavailable — start backend on port 5000");return []}
+ }
+
+ async function chooseTarget(t=target){
+   const safe={x:THREE.MathUtils.clamp(Number(t.x)||0,WORLD.minX,WORLD.maxX),y:THREE.MathUtils.clamp(Number(t.y)||12,WORLD.minY,WORLD.maxY),z:THREE.MathUtils.clamp(Number(t.z)||0,WORLD.minZ,WORLD.maxZ)};
+   setTarget(safe);setDestinationChosen(true);setMode("MANUAL");setStatus("DESTINATION SELECTED");setPhase("READY FOR ROUTE");
+   const r=await calculate(pos,safe); if(r.length)setMessage("Destination locked — calculate route or create mission");
+ }
+
+ async function createMission(){
+   if(!destinationChosen){setMessage("Choose a destination first");return}
+   const r=path.length?path:await calculate();
+   if(!r.length)return;
+   try{
+    const res=await fetch(API+"/missions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({start:HOME,target,route:r,gpsStatus:gps?"CONNECTED":"DENIED",status:"READY",phase:"PLANNED"})});
+    if(!res.ok)throw Error();
+    const m=await res.json();setMission(m);missionRef.current=m;setStatus("MISSION CREATED");setPhase("PLANNED");setMessage("Mission saved and ready");
+   }catch{setMessage("Mission save failed — check backend and MongoDB")}
+ }
+
+ function manualMove(cmd){
+   setMode("MANUAL");setStatus("MANUAL FLIGHT");setPhase("USER CONTROL");setSpeed(8);
+   const step=2, map={UP:[0,-step],DOWN:[0,step],LEFT:[-step,0],RIGHT:[step,0],UP_LEFT:[-step,-step],UP_RIGHT:[step,-step],DOWN_LEFT:[-step,step],DOWN_RIGHT:[step,step]};
+   const [dx,dz]=map[cmd]||[0,0]; if(!map[cmd])return;
+   setHeading(Math.atan2(-dz,-dx)*180/Math.PI);
+   setPos(p=>({x:THREE.MathUtils.clamp(p.x+dx,WORLD.minX,WORLD.maxX),y:p.y,z:THREE.MathUtils.clamp(p.z+dz,WORLD.minZ,WORLD.maxZ)}));
+ }
+
+ async function startAutopilot(){
+   if(!destinationChosen){setMessage("CHOOSE DESTINATION before takeoff");return}
+   const r=path.length?path:await calculate();
+   if(!r.length){setMessage("No safe route — calculate again");return}
+   returning.current=false;setLanding(false);setMode(gps?"AUTOPILOT":"EMERGENCY AUTOPILOT");setStatus(gps?"AUTOPILOT ACTIVE":"EMERGENCY AUTOPILOT");setPhase(gps?"TAKEOFF → TARGET":"GPS LOST → SENSOR NAVIGATION");setSpeed(10);setMessage(gps?"Autonomous flight started":"GPS lost — emergency autopilot engaged");await patchMission({status:gps?"AUTOPILOT":"EMERGENCY AUTOPILOT",phase:gps?"TAKEOFF → TARGET":"GPS LOST → SENSOR NAVIGATION"});
+ }
+
+ async function stopFlight(){setMode("MANUAL");setStatus("STOPPED");setPhase("MANUAL");setSpeed(0);setLanding(false);await patchMission({status:"STOPPED",phase:"MANUAL"})}
+
+ async function emergencyAutopilot(){
+   if(!destinationChosen){setMessage("Choose destination before emergency test");return}
+   setGps(false);setMode("EMERGENCY AUTOPILOT");setStatus("EMERGENCY AUTOPILOT");setPhase("GPS DENIED — ONBOARD SENSORS");setMessage("GPS lost: switching automatically to emergency navigation");
+   const r=await calculate(pos,target);if(r.length){setPath(r);idx.current=0;setSpeed(10);await patchMission({gpsStatus:"DENIED",status:"EMERGENCY AUTOPILOT",phase:"GPS DENIED — ONBOARD SENSORS",route:r})}
+ }
+
+ async function toggleGps(){
+   const next=!gps;setGps(next);
+   if(!next){await emergencyAutopilot()}else{setStatus("GPS RESTORED");setPhase("GPS CONNECTED");setMessage("GPS restored — awaiting pilot/autopilot command");if(mode==="EMERGENCY AUTOPILOT")setMode("MANUAL");await patchMission({gpsStatus:"CONNECTED",status:"READY",phase:"GPS CONNECTED"})}
+ }
+
+ async function addLiveObstacle(){
+   const n=path[idx.current]||{x:pos.x+8,y:pos.y,z:pos.z};
+   const o={id:"dynamic-"+Date.now(),position:{x:n.x,y:n.y,z:n.z},size:{x:6,y:8,z:6},type:"DYNAMIC"};
+   setObstacles(v=>[...v,o]);setSensor(true);setMessage("LIVE OBSTACLE ENTERED — REPLANNING");
+   if(mode!=="MANUAL")await replan([...obstacles,o]);
+ }
+
+ async function replan(currentObstacles=obstacles){
+   if(replanLock.current)return;replanLock.current=true;setSensor(true);setStatus("OBSTACLE DETECTED");setPhase("REAL-TIME REPLANNING");setSpeed(0);
+   try{
+    const r=await fetch(API+"/routes/replan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({start:pos,goal:returning.current?HOME:target,obstacles:currentObstacles})});
+    const d=r.ok?await r.json():null;const route=d?.route||[];
+    if(!route.length){setStatus("ROUTE BLOCKED");setPhase("HOLD POSITION");setMessage("No safe route found — drone holding");return}
+    setPath(route);idx.current=0;setSensor(false);setMode(gps?"AUTOPILOT":"EMERGENCY AUTOPILOT");setStatus(gps?"AUTOPILOT ACTIVE":"EMERGENCY AUTOPILOT");setPhase("REPLANNED SAFE ROUTE");setSpeed(10);setMessage("Obstacle avoided — new route locked");await patchMission({status:gps?"AUTOPILOT":"EMERGENCY AUTOPILOT",phase:"REPLANNED SAFE ROUTE",route});
+   }catch{setStatus("REPLANNING ERROR");setMessage("Backend replan unavailable")}finally{setTimeout(()=>{replanLock.current=false},700)}
+ }
+
+ useEffect(()=>{
+  const s=io(SOCKET_URL);socketRef.current=s;s.on("connect",()=>setPhoneConnected(true));s.on("disconnect",()=>setPhoneConnected(false));
+  s.on("phone-control",async cmd=>{
+   setPhoneCommand(cmd);
+   if(cmd==="START")startAutopilot();
+   else if(cmd==="STOP")stopFlight();
+   else if(cmd==="EMERGENCY")emergencyAutopilot();
+   else if(cmd==="GPS_TOGGLE")toggleGps();
+   else if(cmd.startsWith("TARGET:")){try{const t=JSON.parse(cmd.slice(7));await chooseTarget(t)}catch{setMessage("Invalid remote target")}}
+   else manualMove(cmd);
+  });
+  return()=>s.disconnect();
+ },[gps,destinationChosen,target,path,pos,obstacles,mode]);
+
+ useEffect(()=>{
+  if(!["AUTOPILOT","EMERGENCY AUTOPILOT"].includes(mode)||!path.length)return;
+  let alive=true;
+  const timer=setInterval(async()=>{
+   if(!alive)return;
+   const n=path[idx.current];
+   if(!n){clearInterval(timer);setSpeed(0);setLanding(true);setStatus(returning.current?"HOME ARRIVAL":"TARGET REACHED");setPhase("LANDING");setMessage(returning.current?"Returning home — landing":"Target reached — precision landing");return}
+   if(isBlocked(n)){await replan();return}
+   const d=distance(pos,n),step=Math.min(2.8,d);
+   if(d<.05){idx.current++;return}
+   const ratio=step/d;
+   const next={x:pos.x+(n.x-pos.x)*ratio,y:pos.y+(n.y-pos.y)*ratio,z:pos.z+(n.z-pos.z)*ratio};
+   setHeading(Math.atan2(n.z-pos.z,n.x-pos.x)*180/Math.PI);setPos(next);setSpeed(10);
+   idx.current=distance(next,n)<.15?idx.current+1:idx.current;
+  },70);
+  return()=>{alive=false;clearInterval(timer)}
+ },[mode,path,pos,obstacles]);
+
+ useEffect(()=>{
+  if(!landing)return;
+  const timer=setTimeout(async()=>{
+   setPos(p=>({...p,y:returning.current?HOME.y:target.y}));setSpeed(0);setStatus(returning.current?"MISSION COMPLETE":"LANDED");setPhase(returning.current?"HOME LANDED":"WAITING 10s");
+   await patchMission({status:returning.current?"MISSION COMPLETE":"LANDED",phase:returning.current?"HOME LANDED":"WAITING 10s"});
+   if(!returning.current){
+    await new Promise(r=>setTimeout(r,10000));returning.current=true;
+    const r=await calculate({...pos,y:target.y},HOME);
+    if(!r.length){setStatus("RETURN ROUTE BLOCKED");setPhase("RETURN FAILED");return}
+    setPath(r);idx.current=0;setLanding(false);setMode(gps?"AUTOPILOT":"EMERGENCY AUTOPILOT");setStatus("RETURNING HOME");setPhase("AUTONOMOUS RETURN TO HOME");setSpeed(10);setMessage("10-second landing wait complete — returning home");await patchMission({status:"RETURNING HOME",phase:"AUTONOMOUS RETURN TO HOME",route:r});
+   }
+  },1200);
+  return()=>clearTimeout(timer)
+ },[landing]);
+
+ useEffect(()=>{
+  if(!mission?._id)return;
+  const timer=setInterval(()=>{fetch(API+"/telemetry",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({missionId:mission._id,position:pos,altitude:pos.y,speed,heading,gpsStatus:gps?"CONNECTED":"DENIED",obstacleDetected:sensor,sensorDistance,status,phase,mode})}).catch(()=>{});
+   socketRef.current?.emit("phone-telemetry",{x:pos.x,y:pos.y,z:pos.z,speed,heading,gps:gps?"CONNECTED":"DENIED",status,phase,mode,target,home:HOME,distanceToTarget:distance(pos,target),sensorDistance});
+  },400);return()=>clearInterval(timer)
+ },[mission,pos,speed,heading,gps,sensor,sensorDistance,status,phase,mode,target]);
+
+ const dist=distance(pos,target),eta=Math.ceil(dist/10);
+ return <div className="app">
+  <header className="topbar"><div><h1>NAVIGATE-X <span>◈</span></h1><p>GPS-DENIED AUTONOMOUS NAVIGATION SIMULATOR</p></div><div className="top-status"><span className={gps?"ok":"danger"}>● GPS {gps?"CONNECTED":"LOST"}</span><span className={phoneConnected?"ok":"danger"}>● PHONE {phoneConnected?"LINKED":"OFFLINE"}</span><span>MODE {mode}</span></div></header>
+  <main className="sim-layout">
+   <section className="scene" onContextMenu={e=>e.preventDefault()}>
+    <Canvas shadows camera={{position:[0,28,45],fov:62}} gl={{antialias:true}} style={{touchAction:"none"}}>
+     <color attach="background" args={["#87a9c1"]}/><fog attach="fog" args={["#87a9c1",100,210]}/>
+     <ambientLight intensity={1.5}/><directionalLight castShadow position={[30,80,20]} intensity={3}/><hemisphereLight intensity={1.2} groundColor="#263b2a" skyColor="#b8d7ed"/>
+     <Terrain/>
+     {obstacles.map(o=><ObstacleView key={o.id||JSON.stringify(o.position)} o={o}/>)}<DroneModel position={pos} heading={heading}/>
+     <DroneSensors position={pos} obstacles={obstacles} range={18} onDetection={({detected,distance:front})=>{setSensor(detected);setSensorDistance(front);if(detected&&front<4&&["AUTOPILOT","EMERGENCY AUTOPILOT"].includes(mode))replan()}}/>
+     <Route path={path} returning={returning.current}/><TargetMarker target={target}/><TargetMarker target={HOME} home/>
+     <DroneCamera position={pos} heading={heading}/>
+    </Canvas>
+    <div className="flight-hud"><div className="hud-title">DRONE LIVE VIEW <span className="pulse">● LIVE</span></div><div className="hud-row"><b>{status}</b><span>MODE {mode}</span><span>ALT {pos.y.toFixed(1)}m</span><span>SPD {speed.toFixed(1)}m/s</span><span>HDG {heading.toFixed(0)}°</span></div><div className="hud-row muted">DRONE {pos.x.toFixed(1)} / {pos.y.toFixed(1)} / {pos.z.toFixed(1)} · TARGET {target.x} / {target.y} / {target.z} · ETA {eta}s</div></div>
+    <div className="camera-badge">FPV / CHASE CAMERA · LOCKED</div>
+    <div className="drone-reticle">+</div>
+    <div className="mini-monitor"><div className="mini-title">LIVE TRACKING RADAR</div><div className="radar"><div className="radar-line"></div><div className="radar-drone" style={{left:`${50+pos.x*.35}%`,top:`${50+pos.z*.35}%`}}>◆</div><div className="radar-target" style={{left:`${50+target.x*.35}%`,top:`${50+target.z*.35}%`}}>✦</div><div className="radar-home" style={{left:"50%",top:"50%"}}>H</div></div><small>D DRONE · T TARGET · H HOME</small></div>
+   </section>
+   <aside className="control-panel">
+    <div className="panel-heading"><span>FLIGHT CONTROLLER</span><small>{phoneConnected?"REMOTE LINK ACTIVE":"LOCAL CONTROL"}</small></div>
+    <div className="mode-tabs"><button className={mode==="MANUAL"?"active":""} onClick={()=>{setMode("MANUAL");setStatus("MANUAL READY");setPhase("USER CONTROL");setSpeed(0)}}>MANUAL</button><button className={mode==="AUTOPILOT"?"active":""} onClick={startAutopilot}>AUTOPILOT</button><button className={mode==="EMERGENCY AUTOPILOT"?"active danger-tab":""} onClick={emergencyAutopilot}>EMERGENCY</button></div>
+    <div className="target-box"><div className="section-label">1 · DESTINATION</div><div className="coord-grid"><label>X<input type="number" value={target.x} onChange={e=>setTarget(t=>({...t,x:+e.target.value}))}/></label><label>ALT<input type="number" value={target.y} onChange={e=>setTarget(t=>({...t,y:Math.max(2,+e.target.value)}))}/></label><label>Z<input type="number" value={target.z} onChange={e=>setTarget(t=>({...t,z:+e.target.value}))}/></label></div><button className={destinationChosen?"selected-button":"primary-wide"} onClick={()=>chooseTarget(target)}>{destinationChosen?"✓ DESTINATION LOCKED":"✓ CHOOSE DESTINATION"}</button></div>
+    <div className="button-grid"><button onClick={()=>calculate()}>2 · CALCULATE 3D A*</button><button onClick={createMission}>3 · CREATE MISSION</button><button className="primary" onClick={startAutopilot}>4 · TAKEOFF / START</button><button onClick={stopFlight}>STOP / LAND</button><button className="warning" onClick={addLiveObstacle}>＋ LIVE OBSTACLE</button><button className="warning" onClick={toggleGps}>{gps?"GPS DISCONNECT":"GPS RESTORE"}</button></div>
+    <div className="manual-box"><div className="section-label">MANUAL FLIGHT CONTROL</div><div className="dpad"><span></span><button onClick={()=>manualMove("UP")}>↑</button><span></span><button onClick={()=>manualMove("LEFT")}>←</button><button onClick={()=>stopFlight()}>■</button><button onClick={()=>manualMove("RIGHT")}>→</button><span></span><button onClick={()=>manualMove("DOWN")}>↓</button><span></span></div><p className="hint">Manual mode: user controls the drone. Autopilot mode: route control. Emergency mode: GPS-denied sensor navigation.</p></div>
+    <div className="live-track"><div className="section-label">LIVE TRACKING MONITOR</div><div className="track-grid"><span>MODE<b>{mode}</b></span><span>GPS<b className={gps?"ok":"danger"}>{gps?"LOCK":"LOST"}</b></span><span>ALT<b>{pos.y.toFixed(1)} m</b></span><span>SPEED<b>{speed.toFixed(1)} m/s</b></span><span>DIST<b>{dist.toFixed(1)} m</b></span><span>SENSOR<b className={sensor?"danger":"ok"}>{sensor?sensorDistance.toFixed(1)+" m":"CLEAR"}</b></span><span>ETA<b>{eta}s</b></span><span>PHONE<b>{phoneConnected?"LINKED":"OFFLINE"}</b></span></div></div>
+    <MissionMonitor status={status} phase={phase} gps={gps} waypoints={path.length} missionId={mission?._id} phoneCommand={phoneCommand} phoneConnected={phoneConnected} sensor={sensor}/>
+    <TelemetryPanel data={{...pos,altitude:pos.y,speed,distance:dist,heading,sensorDistance}}/>
+    <div className="message">{message}</div>
+   </aside>
+  </main>
+ </div>;
 }
 
 export default App;
