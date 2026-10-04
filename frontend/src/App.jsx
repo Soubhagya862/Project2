@@ -421,6 +421,8 @@ export default function App() {
   const [pendingTarget, setPendingTarget] = useState(null);
   const [pathPoints, setPathPoints] = useState([]);
   const [targetSelectionPhase, setTargetSelectionPhase] = useState("TARGET");
+  const [pathMode, setPathMode] = useState("DRONE"); // DRONE = automatic vision/memory, MANUAL = operator waypoints
+  const [pathAnalyzing, setPathAnalyzing] = useState(false);
   const socketRef = useRef(null);
   const estimatorRef = useRef({ ...HOME, bias:{x:0,y:0,z:0} });
 
@@ -495,6 +497,7 @@ export default function App() {
   const selectTarget = () => {
     setPendingTarget({ ...target });
     setPathPoints([]);
+    setPathMode("DRONE");
     setTargetSelectionPhase("TARGET");
     setShowTargetMap(true);
   };
@@ -512,6 +515,32 @@ export default function App() {
   };
 
   const chooseMapTarget = (event) => {
+    if (targetSelectionPhase !== "TARGET") return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const nx = clamp((event.clientX-rect.left)/rect.width,0,1);
+    const nz = clamp((event.clientY-rect.top)/rect.height,0,1);
+    setPendingTarget({
+      x:WORLD.minX+nx*(WORLD.maxX-WORLD.minX),
+      y:120,
+      z:WORLD.minZ+nz*(WORLD.maxZ-WORLD.minZ)
+    });
+  };
+
+  const generateDronePath = () => {
+    if (!pendingTarget) return;
+    setPathAnalyzing(true);
+    // The deterministic planner represents the drone's remembered map plus
+    // simulated vision/depth scan. It creates the actual waypoints; the
+    // operator does not choose them.
+    window.setTimeout(() => {
+      const planned = createRoute({ ...position }, { ...pendingTarget });
+      setPathPoints(planned.slice(1, -1));
+      setPathAnalyzing(false);
+    }, 900);
+  };
+
+  const chooseManualPathPoint = (event) => {
+    if (targetSelectionPhase !== "PATH" || pathMode !== "MANUAL") return;
     const rect = event.currentTarget.getBoundingClientRect();
     const nx = clamp((event.clientX-rect.left)/rect.width,0,1);
     const nz = clamp((event.clientY-rect.top)/rect.height,0,1);
@@ -520,40 +549,20 @@ export default function App() {
       y:120,
       z:WORLD.minZ+nz*(WORLD.maxZ-WORLD.minZ)
     };
-
-    if (targetSelectionPhase === "TARGET") {
-      setPendingTarget(point);
-      return;
-    }
-
-    // PATH mode: every click creates the next waypoint. The target itself
-    // is kept as the final destination and does not need to be clicked.
-    if (segmentBlocked(
-      pathPoints.length ? pathPoints[pathPoints.length - 1] : position,
-      point
-    )) return;
-
+    const last = pathPoints.length ? pathPoints[pathPoints.length-1] : position;
+    if (segmentBlocked(last, point)) return;
     setPathPoints((old) => [...old, point]);
   };
 
-  const removeLastPathPoint = () => {
-    setPathPoints((old) => old.slice(0, -1));
-  };
-
+  const removeLastPathPoint = () => setPathPoints((old) => old.slice(0,-1));
   const clearPathPoints = () => setPathPoints([]);
 
   const confirmPath = () => {
-    if (!pendingTarget || !pathPoints.length) return;
-    const nextTarget = {
-      x:clamp(pendingTarget.x,WORLD.minX,WORLD.maxX),
-      y:clamp(pendingTarget.y,30,WORLD.maxY),
-      z:clamp(pendingTarget.z,WORLD.minZ,WORLD.maxZ)
-    };
-    const finalSegmentBlocked = segmentBlocked(pathPoints[pathPoints.length - 1], nextTarget);
-    if (finalSegmentBlocked) return;
-
-    const nextRoute = [{ ...position }, ...pathPoints.map((p) => ({ ...p })), nextTarget];
-    setTarget(nextTarget);
+    if (!pendingTarget || !pathPoints.length || pathAnalyzing) return;
+    const last = pathPoints[pathPoints.length-1];
+    if (segmentBlocked(last, pendingTarget)) return;
+    const nextRoute = [{ ...position }, ...pathPoints.map((p) => ({ ...p })), { ...pendingTarget }];
+    setTarget({ ...pendingTarget });
     setRoute(nextRoute);
     setMissionState("READY");
     setShowTargetMap(false);
@@ -561,10 +570,9 @@ export default function App() {
     setPathPoints([]);
     setTargetSelectionPhase("TARGET");
   };
-
   const reset = () => {
     setPosition({ ...HOME }); setEstimatedPosition({ ...HOME }); estimatorRef.current={...HOME,bias:{x:0,y:0,z:0}};
-    setHeading(0); setSpeed(0); setBattery(100); setMissionState("READY"); setRoute([]); setSensorError(0); setDetectedObstacle(null); setReplans(0); setMissionId(null); setShowTargetMap(false); setPendingTarget(null); setPathPoints([]); setTargetSelectionPhase("TARGET");
+    setHeading(0); setSpeed(0); setBattery(100); setMissionState("READY"); setRoute([]); setSensorError(0); setDetectedObstacle(null); setReplans(0); setMissionId(null); setShowTargetMap(false); setPendingTarget(null); setPathPoints([]); setTargetSelectionPhase("TARGET"); setPathAnalyzing(false);
   };
 
   return (
@@ -632,116 +640,90 @@ export default function App() {
           <div className="target-map-modal">
             <div className="target-map-head">
               <div>
-                <b>{targetSelectionPhase === "TARGET" ? "STEP 1 • SELECT TARGET" : "STEP 2 • DRAW FLIGHT PATH"}</b>
-                <small>
-                  {targetSelectionPhase === "TARGET"
-                    ? "CLICK ANY LOCATION ON THE 3 KM SIMULATION MAP"
-                    : "CLICK POINT BY POINT TO CREATE THE DRONE ROUTE"}
-                </small>
+                <b>{targetSelectionPhase === "TARGET" ? "STEP 1 • SELECT TARGET" : "STEP 2 • PATH PLANNING"}</b>
+                <small>{targetSelectionPhase === "TARGET" ? "SELECT THE DESTINATION — NO XYZ COORDINATES" : "CHOOSE WHO CREATES THE ROUTE"}</small>
               </div>
               <button className="map-close" onClick={() => {
-                setShowTargetMap(false);
-                setPendingTarget(null);
-                setPathPoints([]);
-                setTargetSelectionPhase("TARGET");
+                setShowTargetMap(false); setPendingTarget(null); setPathPoints([]);
+                setTargetSelectionPhase("TARGET"); setPathAnalyzing(false);
               }}>×</button>
             </div>
 
-            <div className="target-map" onClick={chooseMapTarget}>
-              <div className="map-grid large" />
+            {targetSelectionPhase === "TARGET" ? (
+              <>
+                <div className="target-map" onClick={chooseMapTarget}>
+                  <div className="map-grid large" />
+                  {OBSTACLES.map((o)=><span key={o.id} className="map-obstacle" style={{
+                    left:((o.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",
+                    top:((o.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%",
+                    width:(o.sx/(WORLD.maxX-WORLD.minX))*100+"%",
+                    height:(o.sz/(WORLD.maxZ-WORLD.minZ))*100+"%"
+                  }} />)}
+                  <span className="map-home" style={{left:((HOME.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",top:((HOME.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"}} />
+                  {pendingTarget && <span className="map-target pending" style={{left:((pendingTarget.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",top:((pendingTarget.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"}} />}
+                  <div className="map-label top">3 KM SIMULATION AREA</div>
+                  <div className="map-label bottom">CLICK ANYWHERE TO PLACE TARGET</div>
+                </div>
+                <div className="target-map-actions">
+                  <span>{pendingTarget ? "TARGET SELECTED" : "NO TARGET SELECTED"}</span>
+                  <button className="mode" onClick={() => {setShowTargetMap(false);setPendingTarget(null);}}>CANCEL</button>
+                  <button className="primary-button" disabled={!pendingTarget} onClick={confirmTarget}>CONFIRM TARGET</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="path-mode-selector">
+                  <button className={pathMode==="DRONE" ? "path-mode active" : "path-mode"} onClick={() => {setPathMode("DRONE");setPathPoints([]);}}>
+                    <b>🤖 MADE BY DRONE</b><small>Drone vision + remembered map automatically analyzes obstacles and creates the safest route.</small>
+                  </button>
+                  <button className={pathMode==="MANUAL" ? "path-mode active" : "path-mode"} onClick={() => {setPathMode("MANUAL");setPathPoints([]);}}>
+                    <b>👤 CREATE PATH BY YOU</b><small>You choose each waypoint on the map. The drone follows your selected points.</small>
+                  </button>
+                </div>
 
-              {OBSTACLES.map((o) => (
-                <span key={o.id} className="map-obstacle" style={{
-                  left:((o.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",
-                  top:((o.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%",
-                  width:(o.sx/(WORLD.maxX-WORLD.minX))*100+"%",
-                  height:(o.sz/(WORLD.maxZ-WORLD.minZ))*100+"%"
-                }} />
-              ))}
-
-              <span className="map-home" style={{
-                left:((HOME.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",
-                top:((HOME.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"
-              }} />
-
-              {pendingTarget && (
-                <span className="map-target pending" style={{
-                  left:((pendingTarget.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",
-                  top:((pendingTarget.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"
-                }} />
-              )}
-
-              {targetSelectionPhase === "PATH" && (
-                <>
-                  {[
-                    { x:position.x, z:position.z },
-                    ...pathPoints,
-                    pendingTarget
-                  ].slice(0,-1).map((p,i,arr) => {
-                    const n = [
-                      { x:position.x, z:position.z },
-                      ...pathPoints,
-                      pendingTarget
-                    ][i+1];
-                    const x1 = ((p.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100;
-                    const y1 = ((p.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100;
-                    const x2 = ((n.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100;
-                    const y2 = ((n.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100;
-                    const length = Math.hypot(x2-x1,y2-y1);
-                    const angle = Math.atan2(y2-y1,x2-x1)*180/Math.PI;
-                    return <span key={"seg-"+i} className="map-path-segment" style={{
-                      left:x1+"%", top:y1+"%", width:length+"%",
-                      transform:"rotate("+angle+"deg)"
+                <div className="target-map path-map">
+                  <div className="map-grid large" />
+                  {OBSTACLES.map((o)=><span key={o.id} className="map-obstacle" style={{
+                    left:((o.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",
+                    top:((o.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%",
+                    width:(o.sx/(WORLD.maxX-WORLD.minX))*100+"%",
+                    height:(o.sz/(WORLD.maxZ-WORLD.minZ))*100+"%"
+                  }} />)}
+                  <span className="map-home" style={{left:((HOME.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",top:((HOME.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"}} />
+                  <span className="map-target pending" style={{left:((pendingTarget.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",top:((pendingTarget.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"}} />
+                  {pathPoints.map((p,i)=><span key={i} className="map-waypoint" style={{
+                    left:((p.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",
+                    top:((p.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"
+                  }}><b>{i+1}</b></span>)}
+                  {pathPoints.length > 0 && pathPoints.map((p,i) => {
+                    const a = i === 0 ? position : pathPoints[i-1];
+                    return <span key={"line-"+i} className="map-path-segment" style={{
+                      left:((a.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",
+                      top:((a.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%",
+                      width:(Math.hypot(
+                        ((p.x-a.x)/(WORLD.maxX-WORLD.minX))*100,
+                        ((p.z-a.z)/(WORLD.maxZ-WORLD.minZ))*100
+                      ))+"%",
+                      transform:"rotate("+Math.atan2(
+                        ((p.z-a.z)/(WORLD.maxZ-WORLD.minZ)),
+                        ((p.x-a.x)/(WORLD.maxX-WORLD.minX))
+                      )*180/Math.PI+"deg)"
                     }} />;
                   })}
-                  {pathPoints.map((p,i) => (
-                    <span key={i} className="map-waypoint" style={{
-                      left:((p.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",
-                      top:((p.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"
-                    }}>
-                      <b>{i+1}</b>
-                    </span>
-                  ))}
-                </>
-              )}
+                  <div className="map-label top">{pathMode==="DRONE" ? (pathAnalyzing ? "DRONE VISION ANALYZING..." : "AUTOMATIC SENSOR + MEMORY ROUTE") : "OPERATOR WAYPOINT MODE"}</div>
+                  <div className="map-label bottom">{pathMode==="DRONE" ? "DRONE WILL CREATE ALL ROUTE POINTS" : "CLICK TO ADD WAYPOINTS"}</div>
+                </div>
 
-              <div className="map-label top">
-                {targetSelectionPhase === "TARGET" ? "TARGET SELECTION" : "PATH PLANNER • POINT BY POINT"}
-              </div>
-              <div className="map-label bottom">
-                {targetSelectionPhase === "TARGET"
-                  ? "1. CLICK TARGET → 2. CONFIRM TARGET"
-                  : "CLICK ROUTE POINTS → FINISH PATH"}
-              </div>
-            </div>
-
-            <div className="target-map-actions">
-              {targetSelectionPhase === "TARGET" ? (
-                <>
-                  <span>{pendingTarget ? "TARGET SELECTED • NOW CONFIRM IT" : "NO TARGET SELECTED"}</span>
-                  <button className="mode" onClick={() => {
-                    setShowTargetMap(false);
-                    setPendingTarget(null);
-                  }}>CANCEL</button>
-                  <button className="primary-button" disabled={!pendingTarget} onClick={confirmTarget}>
-                    CONFIRM TARGET
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span>
-                    {pathPoints.length
-                      ? `${pathPoints.length} WAYPOINT${pathPoints.length === 1 ? "" : "S"} SELECTED • TARGET IS FINAL POINT`
-                      : "SELECT YOUR FIRST ROUTE POINT"}
-                  </span>
-                  <button className="mode" onClick={removeLastPathPoint} disabled={!pathPoints.length}>UNDO</button>
-                  <button className="mode" onClick={clearPathPoints} disabled={!pathPoints.length}>CLEAR</button>
-                  <button className="primary-button" disabled={!pathPoints.length} onClick={confirmPath}>
-                    FINISH PATH
-                  </button>
-                </>
-              )}
-            </div>
+                {pathMode === "MANUAL" && <div className="path-click-layer" onClick={chooseManualPathPoint} />}
+                <div className="target-map-actions">
+                  <span>{pathMode==="DRONE" ? (pathAnalyzing ? "SCANNING OBSTACLES • ANALYZING ROUTE..." : (pathPoints.length ? pathPoints.length+" DRONE-GENERATED WAYPOINTS" : "READY TO ANALYZE")) : pathPoints.length+" OPERATOR WAYPOINTS"}</span>
+                  {pathMode==="MANUAL" && <button className="mode" onClick={removeLastPathPoint} disabled={!pathPoints.length}>UNDO</button>}
+                  {pathMode==="MANUAL" && <button className="mode" onClick={clearPathPoints} disabled={!pathPoints.length}>CLEAR</button>}
+                  {pathMode==="DRONE" && <button className="mode" onClick={generateDronePath} disabled={pathAnalyzing}>ANALYZE & CREATE PATH</button>}
+                  <button className="primary-button" disabled={!pathPoints.length || pathAnalyzing} onClick={confirmPath}>CONFIRM PATH</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
