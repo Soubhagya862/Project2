@@ -7,7 +7,8 @@ const SOCKET_URL=import.meta.env.VITE_SOCKET_URL||"http://localhost:5000";
 export default function PhoneController(){
  const socketRef=useRef(null);
  const [connected,setConnected]=useState(false);
- const [last,setLast]=useState("STOP");\n const [confirmed,setConfirmed]=useState(false);
+ const [last,setLast]=useState("STOP");
+ const [confirmed,setConfirmed]=useState(false);
  const [target,setTarget]=useState({x:700,y:60,z:450});
  const [telemetry,setTelemetry]=useState({x:0,y:12,z:0,speed:0,heading:0,gps:"CONNECTED",status:"READY",phase:"IDLE",mode:"MANUAL",target:{x:65,y:16,z:0},distanceToTarget:0,sensorDistance:18});
 
