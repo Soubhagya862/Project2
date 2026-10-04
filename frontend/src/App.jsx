@@ -384,6 +384,7 @@ function Metric({ label, value, className = "" }) {
 function Engine({ position, heading, missionState, route, target, setPosition, setHeading, setSpeed, setBattery, setMissionState, setDetectedObstacle, setSensorRange, setRoute, setReplans, pathMode, setDiscoveredObstacles, setScanCount }) {
   const state = useRef({ ...position });
   const velocity = useRef({ x: 0, y: 0, z: 0 });
+  const lastReplanAt = useRef(0);
   useFrame((_, dt) => {
     if (!["AUTONOMOUS", "RETURNING", "EMERGENCY AUTOPILOT"].includes(missionState) || route.length < 2) {
       setSpeed(0);
@@ -430,11 +431,12 @@ function Engine({ position, heading, missionState, route, target, setPosition, s
 
     // Autonomous mode can replan when a remembered/visually detected obstacle
     // makes the next route segment unsafe.
-    if (pathMode === "DRONE" && missionState !== "RETURNING" && nearestObstacle && nearestObstacle.distance < 180) {
+    if (pathMode === "DRONE" && missionState !== "RETURNING" && nearestObstacle && nearestObstacle.distance < 180 && performance.now() - lastReplanAt.current > 1500) {
       const nextWaypoint = route[nextIndex];
       if (nextWaypoint && segmentBlocked(state.current, nextWaypoint, OBSTACLES)) {
         const replanned = createRoute({ ...state.current }, { ...target }, OBSTACLES);
         if (replanned.length > 1) {
+          lastReplanAt.current = performance.now();
           setRoute(replanned);
           setReplans((n) => n + 1);
         }
@@ -513,7 +515,7 @@ export default function App() {
   };
 
   const startMission = async () => {
-    const nextRoute = createRoute({ ...position }, { ...target });
+    const nextRoute = route.length > 1 ? route : createRoute({ ...position }, { ...target });
     setRoute(nextRoute);
     setMissionState(gpsDenied ? "EMERGENCY AUTOPILOT" : "AUTONOMOUS");
     try {
@@ -675,11 +677,11 @@ export default function App() {
             <Metric label="EST Z" value={estimatedPosition.z.toFixed(1)+" m"}/><Metric label="ALTITUDE" value={estimatedPosition.y.toFixed(1)+" m"}/>
             <Metric label="SPEED" value={speed.toFixed(1)+" m/s"}/><Metric label="TARGET DIST." value={distance.toFixed(1)+" m"}/>
             <Metric label="HEADING" value={heading.toFixed(0)+"°"}/><Metric label="MISSION" value={progress.toFixed(1)+"%"}/>
-            <Metric label="ROUTE LEN." value={routeDistance.toFixed(0)+" m"}/><Metric label="REPLANS" value={replans}/>
+            <Metric label="ROUTE LEN." value={routeDistance.toFixed(0)+" m"}/><Metric label="REPLANS" value={replans}/><Metric label="SCANNED" value={discoveredObstacles.length+" / "+OBSTACLES.length}/>
           </div>
           <div className="sensor-card"><div className="section-label">ONBOARD SENSOR STATUS</div><p><span>IMU / DEAD RECKONING</span><b>● ACTIVE</b></p><p><span>CAMERA</span><b>● ACTIVE</b></p><p><span>DEPTH / LiDAR</span><b>● ACTIVE</b></p><p><span>ALTIMETER</span><b>● ACTIVE</b></p><p><span>POSITION ESTIMATOR</span><b>● ACTIVE</b></p><p><span>GPS</span><b className={gpsDenied?"bad":""}>● {gpsDenied?"DENIED":"CONNECTED"}</b></p></div>
           <div className="accuracy-card"><span>POSITION ESTIMATION ERROR</span><strong>{sensorError.toFixed(2)} m</strong><small>Estimated position is deliberately imperfect; ground truth remains internal to the simulator.</small></div>
-          <div className="sensor-card"><div className="section-label">OBSTACLE / SENSOR</div><p><span>DETECTION</span><b>{detectedObstacle||"CLEAR"}</b></p><p><span>SENSOR RANGE</span><b>{sensorRange.toFixed(0)} m</b></p><p><span>ROUTE PLANNER</span><b>3D ACTIVE</b></p></div>
+          <div className="sensor-card"><div className="section-label">OBSTACLE / SENSOR</div><p><span>DETECTION</span><b>{detectedObstacle||"CLEAR"}</b></p><p><span>SENSOR RANGE</span><b>{sensorRange.toFixed(0)} m</b></p><p><span>MEMORY MAP</span><b>{discoveredObstacles.length} OBJECTS</b></p><p><span>ROUTE PLANNER</span><b>{pathMode==="DRONE"?"VISION + MEMORY":"OPERATOR WAYPOINTS"}</b></p></div>
         </aside>
       </main>
 
