@@ -47,10 +47,10 @@ export default function PhoneController(){
   </div>
 
   <div className="remote-actions">
-   <button className="takeoff" onClick={()=>send("START")}>AUTOPILOT / TAKEOFF</button>
+   <button className="takeoff" onClick={()=>send("START")}>TAKE OFF</button>
    <button className="danger-button" onClick={()=>send("EMERGENCY")}>EMERGENCY AUTOPILOT</button>
    <button onClick={()=>send("GPS_TOGGLE")}>{telemetry.gps==="CONNECTED"?"SIMULATE GPS LOSS":"RESTORE GPS"}</button>
-   <button onClick={()=>send("STOP")}>STOP / LAND</button>
+   <button onClick={()=>send("LAND")}>LAND</button>
   </div>
 
   <div className="last-command">LAST COMMAND <b>{last}</b></div>
