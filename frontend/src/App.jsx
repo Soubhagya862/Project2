@@ -375,6 +375,8 @@ export default function App() {
   const [detectedObstacle, setDetectedObstacle] = useState(null);
   const [replans, setReplans] = useState(0);
   const [missionId, setMissionId] = useState(null);
+  const [showTargetMap, setShowTargetMap] = useState(false);
+  const [pendingTarget, setPendingTarget] = useState(null);
   const socketRef = useRef(null);
   const estimatorRef = useRef({ ...HOME, bias:{x:0,y:0,z:0} });
 
@@ -447,16 +449,25 @@ export default function App() {
   };
 
   const selectTarget = () => {
-    const x = Number(window.prompt("Target X coordinate (metres):", String(target.x)));
-    if (!Number.isFinite(x)) return;
-    const z = Number(window.prompt("Target Z coordinate (metres):", String(target.z)));
-    if (!Number.isFinite(z)) return;
-    const y = Number(window.prompt("Target altitude Y (metres):", String(target.y)));
-    if (!Number.isFinite(y)) return;
-    const nextTarget = { x:clamp(x,WORLD.minX,WORLD.maxX), y:clamp(y,30,WORLD.maxY), z:clamp(z,WORLD.minZ,WORLD.maxZ) };
+    setPendingTarget({ ...target });
+    setShowTargetMap(true);
+  };
+
+  const confirmTarget = () => {
+    if (!pendingTarget) return;
+    const nextTarget = { x:clamp(pendingTarget.x,WORLD.minX,WORLD.maxX), y:clamp(pendingTarget.y,30,WORLD.maxY), z:clamp(pendingTarget.z,WORLD.minZ,WORLD.maxZ) };
     setTarget(nextTarget);
     setRoute(createRoute(position,nextTarget));
     setMissionState("READY");
+    setShowTargetMap(false);
+    setPendingTarget(null);
+  };
+
+  const chooseMapTarget = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const nx = clamp((event.clientX-rect.left)/rect.width,0,1);
+    const nz = clamp((event.clientY-rect.top)/rect.height,0,1);
+    setPendingTarget({ x:WORLD.minX+nx*(WORLD.maxX-WORLD.minX), y:120, z:WORLD.minZ+nz*(WORLD.maxZ-WORLD.minZ) });
   };
 
   const reset = () => {
@@ -502,7 +513,7 @@ export default function App() {
               <Engine position={position} missionState={missionState} route={route} setPosition={setPosition} setHeading={setHeading} setSpeed={setSpeed} setBattery={setBattery} setMissionState={setMissionState} setDetectedObstacle={setDetectedObstacle} setSensorRange={setSensorRange}/>
             </Canvas>
             <div className={speed > 1 ? "view-mode fpv-active" : "view-mode"}>{speed > 1 ? "● DRONE FLIGHT VIEW • FULL DRONE" : "● OPERATOR VIEW • STATIONARY"}</div>
-            <div className="monitor-hud"><span>EST X <b>{estimatedPosition.x.toFixed(1)}m</b></span><span>EST Y <b>{estimatedPosition.y.toFixed(1)}m</b></span><span>EST Z <b>{estimatedPosition.z.toFixed(1)}m</b></span><span>HDG <b>{heading.toFixed(0)}°</b></span><span>GPS <b>{gpsDenied?"DENIED":"CONNECTED"}</b></span></div>
+            <div className="monitor-hud"><span>ALT <b>{estimatedPosition.y.toFixed(1)}m</b></span><span>HDG <b>{heading.toFixed(0)}°</b></span><span>GPS <b>{gpsDenied?"DENIED":"CONNECTED"}</b></span></div>
             <div className="route-status"><span>MISSION {missionState}</span><b>{progress.toFixed(1)}% • {distance.toFixed(1)}m TARGET • {route.length} WAYPOINTS</b></div>
           </div>
         </section>
@@ -523,6 +534,22 @@ export default function App() {
           <div className="sensor-card"><div className="section-label">OBSTACLE / SENSOR</div><p><span>DETECTION</span><b>{detectedObstacle||"CLEAR"}</b></p><p><span>SENSOR RANGE</span><b>{sensorRange.toFixed(0)} m</b></p><p><span>ROUTE PLANNER</span><b>3D ACTIVE</b></p></div>
         </aside>
       </main>
+
+      {showTargetMap && (
+        <div className="target-map-overlay">
+          <div className="target-map-modal">
+            <div className="target-map-head"><div><b>SELECT TARGET</b><small>3 KM SIMULATION ENVIRONMENT • CLICK ANY LOCATION</small></div><button className="map-close" onClick={() => {setShowTargetMap(false);setPendingTarget(null);}}>×</button></div>
+            <div className="target-map" onClick={chooseMapTarget}>
+              <div className="map-grid large" />
+              {OBSTACLES.map((o)=><span key={o.id} className="map-obstacle" style={{left:((o.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",top:((o.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%",width:(o.sx/(WORLD.maxX-WORLD.minX))*100+"%",height:(o.sz/(WORLD.maxZ-WORLD.minZ))*100+"%"}} />)}
+              <span className="map-home" style={{left:((HOME.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",top:((HOME.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"}} />
+              {pendingTarget && <span className="map-target pending" style={{left:((pendingTarget.x-WORLD.minX)/(WORLD.maxX-WORLD.minX))*100+"%",top:((pendingTarget.z-WORLD.minZ)/(WORLD.maxZ-WORLD.minZ))*100+"%"}} />}
+              <div className="map-label top">3 KM SIMULATION AREA</div><div className="map-label bottom">CLICK ANYWHERE TO PLACE TARGET</div>
+            </div>
+            <div className="target-map-actions"><span>{pendingTarget ? "TARGET • X "+pendingTarget.x.toFixed(0)+"m • Z "+pendingTarget.z.toFixed(0)+"m" : "NO TARGET SELECTED"}</span><button className="mode" onClick={() => {setShowTargetMap(false);setPendingTarget(null);}}>CANCEL</button><button className="primary-button" disabled={!pendingTarget} onClick={confirmTarget}>CONFIRM TARGET</button></div>
+          </div>
+        </div>
+      )}
 
       <section className="bottom-monitor">
         <div><div className="panel-title">MISSION MONITOR • FULL AREA</div><MiniMap position={position} target={target} route={route}/></div>
