@@ -30,6 +30,9 @@ io.on("connection",socket=>{
 
     connectedClients.set(socket.id,{role});
     io.emit("client-status",{role,connected:true});
+    for(const client of connectedClients.values()){
+      if(client.role==="phone"||client.role==="simulator") socket.emit("client-status",{role:client.role,connected:true});
+    }
   });
 
   socket.on("phone-control",data=>{
