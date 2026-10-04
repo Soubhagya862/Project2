@@ -3,49 +3,91 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Grid, OrbitControls, PerspectiveCamera } from "@react-three/drei";
 import * as THREE from "three";
 
-const WORLD_SIZE = 3000;\nconst HOME = { x: 0, y: 4, z: 0 };
+const WORLD_SIZE = 3000;
+const HOME = { x: 0, y: 4, z: 0 };
 const TARGET = { x: 1400, y: 100, z: -1100 };
+const START_PAD = { x: 0, y: 2, z: 0 };
 
-const START_PAD = { x: 0, y: 2, z: 0 };\n\nconst OBSTACLES = [
+const OBSTACLES = [
   { x: 130, y: 35, z: -40, sx: 70, sy: 70, sz: 70 },
   { x: 245, y: 55, z: -140, sx: 90, sy: 110, sz: 55 },
   { x: 320, y: 45, z: 70, sx: 100, sy: 90, sz: 80 },
   { x: 390, y: 60, z: -30, sx: 55, sy: 120, sz: 55 }
 ];
 
+function LaunchPad() {
+  return (
+    <group position={[START_PAD.x, START_PAD.y, START_PAD.z]}>
+      <mesh receiveShadow>
+        <cylinderGeometry args={[45, 45, 4, 64]} />
+        <meshStandardMaterial color="#263238" metalness={0.7} roughness={0.35} />
+      </mesh>
+      <mesh position={[0, 2.3, 0]}>
+        <torusGeometry args={[38, 2, 16, 64]} />
+        <meshStandardMaterial color="#00d9ff" emissive="#003d4a" emissiveIntensity={1.5} />
+      </mesh>
+      <mesh position={[0, 2.4, 0]}>
+        <torusGeometry args={[24, 1.2, 12, 64]} />
+        <meshStandardMaterial color="#ffffff" emissive="#555555" emissiveIntensity={0.5} />
+      </mesh>
+      {[[ -24, 12 ], [24, 12], [-24, -12], [24, -12]].map(([x, z], index) => (
+        <group key={index} position={[x, 10, z]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[2.5, 2.5, 16, 16]} />
+            <meshStandardMaterial color="#37474f" metalness={0.8} roughness={0.25} />
+          </mesh>
+          <mesh position={[0, 8, 0]}>
+            <sphereGeometry args={[3, 16, 16]} />
+            <meshStandardMaterial color="#00e5ff" emissive="#006677" emissiveIntensity={2} />
+          </mesh>
+        </group>
+      ))}
+      <mesh position={[0, 8, 0]}>
+        <cylinderGeometry args={[5, 7, 12, 32]} />
+        <meshStandardMaterial color="#455a64" metalness={0.9} roughness={0.2} />
+      </mesh>
+      <mesh position={[0, 14, 0]}>
+        <cylinderGeometry args={[10, 10, 2, 32]} />
+        <meshStandardMaterial color="#607d8b" metalness={0.8} roughness={0.25} />
+      </mesh>
+    </group>
+  );
+}
+
 function Obstacle({ o }) {
   return (
-    <mesh position={[o.x, o.y, o.z]} castShadow>
-      <boxGeometry args={[o.sx, o.sy, o.sz]} />
-      <meshStandardMaterial color="#7d4d3d" roughness={0.85} />
-    </mesh>
+    <group position={[o.x, o.y, o.z]}>
+      <mesh position={[0, 0, 0]} castShadow>
+        <boxGeometry args={[o.sx, o.sy, o.sz]} />
+        <meshStandardMaterial color="#7d4d3d" roughness={0.85} />
+      </mesh>
+      <mesh>
+        <boxGeometry args={[o.sx + 4, o.sy + 4, o.sz + 4]} />
+        <meshBasicMaterial color="#ff7043" wireframe transparent opacity={0.22} />
+      </mesh>
+    </group>
   );
 }
 
 function Drone({ position, heading, flying }) {
   const group = useRef();
   const props = useRef([]);
+
   useFrame((_, dt) => {
     if (!group.current) return;
-    group.current.rotation.y = THREE.MathUtils.lerp(
-      group.current.rotation.y,
-      heading,
-      Math.min(1, dt * 7)
-    );
+    group.current.rotation.y = THREE.MathUtils.lerp(group.current.rotation.y, heading, Math.min(1, dt * 7));
     props.current.forEach((p) => {
       if (p && flying) p.rotation.y += dt * 35;
     });
   });
 
   const arms = [
-    [-1.65, 0, -1.05],
-    [1.65, 0, -1.05],
-    [-1.65, 0, 1.05],
-    [1.65, 0, 1.05]
+    [-1.65, 0, -1.05], [1.65, 0, -1.05],
+    [-1.65, 0, 1.05], [1.65, 0, 1.05]
   ];
 
   return (
-    <group ref={group} position={[position.x, position.y, position.z]}>
+    <group ref={group} position={[position.x, position.y, position.z]} scale={[1.25, 1.25, 1.25]}>
       <mesh castShadow>
         <boxGeometry args={[3.6, 0.65, 2.4]} />
         <meshStandardMaterial color="#202a32" metalness={0.8} roughness={0.25} />
@@ -54,6 +96,16 @@ function Drone({ position, heading, flying }) {
         <sphereGeometry args={[0.45, 20, 14]} />
         <meshStandardMaterial color="#111820" metalness={0.9} />
       </mesh>
+
+      <mesh position={[-2.9, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <boxGeometry args={[1.1, 5.5, 0.28]} />
+        <meshStandardMaterial color="#1976d2" metalness={0.7} roughness={0.25} />
+      </mesh>
+      <mesh position={[2.9, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <boxGeometry args={[1.1, 5.5, 0.28]} />
+        <meshStandardMaterial color="#1976d2" metalness={0.7} roughness={0.25} />
+      </mesh>
+
       {arms.map((a, i) => (
         <group key={i} position={a}>
           <mesh>
@@ -64,21 +116,19 @@ function Drone({ position, heading, flying }) {
             <cylinderGeometry args={[0.16, 0.16, 0.5, 12]} />
             <meshStandardMaterial color="#242d34" />
           </mesh>
-          <mesh
-            ref={(el) => (props.current[i] = el)}
-            position={[i % 2 ? 1.15 : -1.15, 0.5, 0]}
-          >
+          <mesh ref={(el) => (props.current[i] = el)} position={[i % 2 ? 1.15 : -1.15, 0.5, 0]}>
             <boxGeometry args={[2.0, 0.05, 0.12]} />
             <meshStandardMaterial color="#111" />
           </mesh>
         </group>
       ))}
+
       <pointLight position={[0, -0.7, -1.2]} intensity={3} distance={12} color="#42e8ff" />
     </group>
   );
 }
 
-function Marker({ point, color, label }) {
+function Marker({ point, color }) {
   return (
     <group position={[point.x, point.y, point.z]}>
       <mesh>
@@ -104,19 +154,20 @@ function Scene({ position, heading, flying }) {
         <planeGeometry args={[WORLD_SIZE, WORLD_SIZE]} />
         <meshStandardMaterial color="#20362a" roughness={1} />
       </mesh>
+      <LaunchPad />
       {OBSTACLES.map((o, i) => <Obstacle key={i} o={o} />)}
-      <Marker point={HOME} color="#ffd34d" label="HOME" />
-      <Marker point={TARGET} color="#4dff9a" label="TARGET" />
+      <Marker point={HOME} color="#ffd34d" />
+      <Marker point={TARGET} color="#4dff9a" />
       <Drone position={position} heading={heading} flying={flying} />
       <OrbitControls enableDamping dampingFactor={0.08} />
     </>
   );
 }
 
-function ControlButton({ children, onDown, onUp, wide = false, danger = false }) {
+function ControlButton({ children, onDown, onUp }) {
   return (
     <button
-      className={`control-button ${wide ? "wide" : ""} ${danger ? "danger" : ""}`}
+      className="control-button"
       onPointerDown={(e) => { e.preventDefault(); onDown?.(); }}
       onPointerUp={onUp}
       onPointerCancel={onUp}
@@ -136,79 +187,69 @@ export default function App() {
   const [speed, setSpeed] = useState(0);
   const [heading, setHeading] = useState(0);
   const [gps, setGps] = useState(true);
-  const [message, setMessage] = useState("Select a flight mode and take off.");
   const [missionProgress, setMissionProgress] = useState(0);
-  const [autoRunning, setAutoRunning] = useState(false);
-  const [emergencyRunning, setEmergencyRunning] = useState(false);
-  const motion = useRef({ x: 0, y: 0, z: 0 });
+  const [message, setMessage] = useState("Drone is ready on the launch stand.");
   const keys = useRef(new Set());
   const autoRef = useRef(false);
-  const emergencyRef = useRef(false);
   const lastTime = useRef(performance.now());
 
   const flying = position.y > 4.5;
-
   const distanceToTarget = useMemo(
     () => Math.hypot(position.x - TARGET.x, position.y - TARGET.y, position.z - TARGET.z),
     [position]
   );
 
-  const setMotion = (x, y, z) => {
-    motion.current = { x, y, z };
-    setSpeed(Math.round(Math.hypot(x, y, z)));
-  };
-
   const takeOff = () => {
     if (flying) return;
     autoRef.current = false;
-    emergencyRef.current = false;
-    setAutoRunning(false);
-    setEmergencyRunning(false);
     setMode("MANUAL");
     setStatus("TAKE OFF");
     setPhase("ASCENDING");
-    setMessage("Drone taking off...");
-    setPosition((p) => ({ ...p, y: 45 }));
-    setSpeed(18);
-    setTimeout(() => {
-      setStatus("AIRBORNE");
-      setPhase("MANUAL CONTROL");
-      setMessage("Drone is airborne. Use W A S D or the controls.");
-      setSpeed(0);
-    }, 700);
+    setMessage("Drone taking off from launch stand...");
+    let y = HOME.y;
+    const timer = setInterval(() => {
+      y += 2;
+      if (y >= 50) {
+        clearInterval(timer);
+        y = 50;
+        setStatus("AIRBORNE");
+        setPhase("MANUAL CONTROL");
+        setMessage("Drone is airborne. Use W A S D.");
+        setSpeed(0);
+      }
+      setPosition((p) => ({ ...p, y }));
+    }, 50);
   };
 
   const land = () => {
+    if (!flying) return;
     autoRef.current = false;
-    emergencyRef.current = false;
-    setAutoRunning(false);
-    setEmergencyRunning(false);
-    setMotion(0, 0, 0);
     setStatus("LANDING");
     setPhase("DESCENDING");
-    setMessage("Landing...");
-    setPosition((p) => ({ ...p, y: 4 }));
-    setTimeout(() => {
-      setStatus("LANDED");
-      setPhase("ON GROUND");
-      setSpeed(0);
-      setMessage("Drone successfully landed.");
-    }, 600);
+    setMessage("Landing on the launch stand...");
+    let y = position.y;
+    const timer = setInterval(() => {
+      y -= 2;
+      if (y <= HOME.y) {
+        clearInterval(timer);
+        y = HOME.y;
+        setPosition(HOME);
+        setStatus("LANDED");
+        setPhase("ON GROUND");
+        setSpeed(0);
+        setMessage("Drone successfully landed on the starting stand.");
+      } else {
+        setPosition((p) => ({ ...p, y }));
+      }
+    }, 50);
   };
 
-  const manual = (x, y, z) => {
-    if (!flying) {
-      setMessage("Press TAKE OFF first.");
-      return;
-    }
+  const stop = () => {
     autoRef.current = false;
-    emergencyRef.current = false;
-    setAutoRunning(false);
-    setEmergencyRunning(false);
-    setMode("MANUAL");
-    setStatus("MANUAL FLIGHT");
-    setPhase("REMOTE CONTROL");
-    setMotion(x, y, z);
+    setSpeed(0);
+    setStatus(flying ? "HOVER" : "READY");
+    setPhase(flying ? "HOLD POSITION" : "ON GROUND");
+    setMessage("Movement stopped.");
   };
 
   const startAuto = () => {
@@ -216,32 +257,25 @@ export default function App() {
       setMessage("Press TAKE OFF first.");
       return;
     }
-    emergencyRef.current = false;
     autoRef.current = true;
-    setEmergencyRunning(false);
-    setAutoRunning(true);
     setMode("AUTOPILOT");
     setStatus("AUTOPILOT ACTIVE");
     setPhase("PATH FOLLOWING");
-    setMessage("Autopilot is calculating and following a safe route.");
+    setMessage("Autopilot is navigating to the target.");
   };
 
   const startEmergency = () => {
-    emergencyRef.current = true;
     autoRef.current = true;
-    setEmergencyRunning(true);
-    setAutoRunning(true);
     setMode("EMERGENCY AUTOPILOT");
     setGps(false);
     setStatus("EMERGENCY AUTOPILOT");
     setPhase("GPS DENIED / SENSOR NAVIGATION");
     setMessage("GPS lost. Emergency autopilot is navigating to the target.");
-    if (!flying) setPosition((p) => ({ ...p, y: 55 }));
+    if (!flying) setPosition((p) => ({ ...p, y: 50 }));
   };
 
   useEffect(() => {
     const down = (e) => {
-      if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
       const k = e.key.toLowerCase();
       if (["w", "a", "s", "d"].includes(k)) {
         e.preventDefault();
@@ -269,11 +303,9 @@ export default function App() {
           const dy = TARGET.y - p.y;
           const dz = TARGET.z - p.z;
           const d = Math.hypot(dx, dy, dz);
+
           if (d < 8) {
             autoRef.current = false;
-            emergencyRef.current = false;
-            setAutoRunning(false);
-            setEmergencyRunning(false);
             setStatus("TARGET REACHED");
             setPhase("HOVER AT TARGET");
             setSpeed(0);
@@ -281,19 +313,24 @@ export default function App() {
             setMessage("Target reached. Drone is holding position.");
             return { ...p, ...TARGET };
           }
+
+          const total = Math.hypot(TARGET.x - HOME.x, TARGET.y - HOME.y, TARGET.z - HOME.z);
           const step = Math.min(42 * dt, d);
-          setSpeed(Math.round(step / Math.max(dt, 0.01)));
-          setMissionProgress(Math.max(0, Math.min(100, 100 * (1 - d / Math.hypot(TARGET.x - HOME.x, TARGET.y - HOME.y, TARGET.z - HOME.z)))));
-          return {
+          const next = {
             x: p.x + (dx / d) * step,
             y: p.y + (dy / d) * step,
             z: p.z + (dz / d) * step
           };
+
+          setSpeed(Math.round(step / Math.max(dt, 0.01)));
+          setMissionProgress(Math.max(0, Math.min(100, 100 * (1 - d / total))));
+          return next;
         });
       } else if (flying) {
         const k = keys.current;
         const x = (k.has("d") ? 1 : 0) - (k.has("a") ? 1 : 0);
         const z = (k.has("s") ? 1 : 0) - (k.has("w") ? 1 : 0);
+
         if (x || z) {
           setMode("MANUAL");
           setStatus("MANUAL FLIGHT");
@@ -310,21 +347,10 @@ export default function App() {
       setBattery((b) => Math.max(0, b - (flying ? dt * 0.018 : 0)));
       raf = requestAnimationFrame(tick);
     };
+
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [flying]);
-
-  const stop = () => {
-    autoRef.current = false;
-    emergencyRef.current = false;
-    setAutoRunning(false);
-    setEmergencyRunning(false);
-    setMotion(0, 0, 0);
-    setSpeed(0);
-    setStatus(flying ? "HOVER" : "READY");
-    setPhase(flying ? "HOLD POSITION" : "ON GROUND");
-    setMessage("Movement stopped.");
-  };
 
   return (
     <div className="simulator">
@@ -357,10 +383,10 @@ export default function App() {
           <div className="control-section">
             <div className="section-label">MANUAL MOVEMENT</div>
             <div className="wasd">
-              <ControlButton onDown={() => manual(0, 0, -1)} onUp={stop}>W</ControlButton>
-              <ControlButton onDown={() => manual(-1, 0, 0)} onUp={stop}>A</ControlButton>
-              <ControlButton onDown={() => manual(0, 0, 1)} onUp={stop}>S</ControlButton>
-              <ControlButton onDown={() => manual(1, 0, 0)} onUp={stop}>D</ControlButton>
+              <ControlButton onDown={() => setMode("MANUAL")}>W</ControlButton>
+              <ControlButton onDown={() => setMode("MANUAL")}>A</ControlButton>
+              <ControlButton onDown={() => setMode("MANUAL")}>S</ControlButton>
+              <ControlButton onDown={() => setMode("MANUAL")}>D</ControlButton>
             </div>
             <p className="help">W = FORWARD · S = BACK · A = LEFT · D = RIGHT</p>
           </div>
@@ -368,8 +394,8 @@ export default function App() {
           <div className="control-section">
             <div className="section-label">ALTITUDE</div>
             <div className="two-buttons">
-              <ControlButton onDown={() => manual(0, 1, 0)} onUp={stop}>ALT ↑</ControlButton>
-              <ControlButton onDown={() => manual(0, -1, 0)} onUp={stop}>ALT ↓</ControlButton>
+              <ControlButton onDown={() => setMode("MANUAL")}>ALT ↑</ControlButton>
+              <ControlButton onDown={() => setMode("MANUAL")}>ALT ↓</ControlButton>
             </div>
           </div>
 
@@ -387,22 +413,26 @@ export default function App() {
           <div className="monitor-head">
             <div>
               <b>3D DRONE MONITOR</b>
-              <small>LIVE SIMULATION / OBSTACLE ENVIRONMENT</small>
+              <small>LIVE SIMULATION / 3 KM × 3 KM WORLD</small>
             </div>
             <span className={flying ? "ok" : "muted"}>● {flying ? "AIRBORNE" : "LANDED"}</span>
           </div>
+
           <div className="canvas-wrap">
             <Canvas shadows>
               <color attach="background" args={["#07131c"]} />
               <fog attach="fog" args={["#07131c", 450, 1300]} />
               <Scene position={position} heading={heading} flying={flying} />
             </Canvas>
+
             <div className="hud">
               <span>MODE <b>{mode}</b></span>
               <span>PHASE <b>{phase}</b></span>
               <span>SPEED <b>{speed} m/s</b></span>
             </div>
-            <div className="target-badge">TARGET {Math.round(TARGET.x)}, {Math.round(TARGET.y)}, {Math.round(TARGET.z)}</div>
+
+            <div className="target-badge">TARGET {TARGET.x}, {TARGET.y}, {TARGET.z}</div>
+
             <div className="progress">
               <div style={{ width: `${missionProgress}%` }} />
             </div>
