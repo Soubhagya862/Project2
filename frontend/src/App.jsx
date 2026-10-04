@@ -148,7 +148,7 @@ function TargetMarker({target,home=false}){
 }
 
 function App(){
- const socketRef=useRef(null),idx=useRef(0),pathRef=useRef([]),missionRef=useRef(null),replanLock=useRef(false),returning=useRef(false),manualAnnounced=useRef(false),manualMotionRef=useRef({vx:0,vy:0,vz:0,yaw:0,until:0});
+ const socketRef=useRef(null),idx=useRef(0),pathRef=useRef([]),missionRef=useRef(null),replanLock=useRef(false),returning=useRef(false),manualAnnounced=useRef(false),manualMotionRef=useRef({vx:0,vy:0,vz:0,yaw:0,active:false});
  const [pos,setPos]=useState({...HOME}),[target,setTarget]=useState({x:700,y:60,z:450}),[path,setPath]=useState([]);
  const [obstacles,setObstacles]=useState(BASE_OBSTACLES),[gps,setGps]=useState(true),[mode,setMode]=useState("MANUAL");
  const [status,setStatus]=useState("READY"),[phase,setPhase]=useState("IDLE"),[speed,setSpeed]=useState(0),[heading,setHeading]=useState(0);
@@ -211,7 +211,7 @@ function App(){
    else if(cmd==="YAW_LEFT"){yaw=yawSpeed}
    else if(cmd==="YAW_RIGHT"){yaw=-yawSpeed}
    else return;
-   manualMotionRef.current={vx,vy,vz,yaw,until:now+420};
+   manualMotionRef.current={vx,vy,vz,yaw,active:true};
    setSpeed(Math.hypot(vx,vz)+Math.abs(vy));
    if(yaw)setPhase(cmd==="YAW_LEFT"?"YAW LEFT":"YAW RIGHT");
    else if(vy>0)setPhase("ASCENDING");
@@ -233,7 +233,7 @@ function App(){
  }
 
  async function stopFlight(){
-   manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,until:0};
+   manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,active:false};
    setLanding(false);setMode("MANUAL");setStatus("LANDING");setPhase("REMOTE LAND COMMAND");setSpeed(3);
    const startY=pos.y;
    if(startY<=2.5){setPos(p=>({...p,y:2}));setSpeed(0);setStatus("LANDED");setPhase("LANDED");return}
@@ -283,7 +283,7 @@ function App(){
    if(cmd==="START")return startAutopilot(false);
    if(cmd==="AUTOPILOT")return startAutopilot(true);
    if(cmd==="STOP"||cmd==="HOVER"){
-     manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,until:0};
+     manualMotionRef.current={vx:0,vy:0,vz:0,yaw:0,active:false};
      setSpeed(0);
      setPhase("HOVER");
      setStatus(pos.y>2.5?"AIRBORNE":"LANDED");
