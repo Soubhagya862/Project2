@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import {Canvas,useFrame,useThree} from "@react-three/fiber";
-import {Grid,Line,OrbitControls} from "@react-three/drei";
+import {Grid,Line} from "@react-three/drei";
 import * as THREE from "three";
 import {io} from "socket.io-client";
 import TelemetryPanel from "./components/TelemetryPanel";
@@ -74,14 +74,15 @@ function DynamicObject({o}){return <group position={[o.position.x,o.position.y,o
   <pointLight intensity={2} distance={8}/>
 </group>}
 
-function DroneCamera({position,heading,enabled}){
+function DroneCamera({position,heading}){
   const {camera}=useThree();
-  useFrame((_,d)=>{
-    if(!enabled)return;
+  const initialized=useRef(false);
+  useFrame((_,delta)=>{
     const a=heading*Math.PI/180;
-    const desired=new THREE.Vector3(position.x,position.y+2.4,position.z);
-    camera.position.lerp(desired,1-Math.pow(.001,d));
-    const look=new THREE.Vector3(position.x+Math.cos(a)*18,position.y+1.2,position.z+Math.sin(a)*18);
+    const desired=new THREE.Vector3(position.x-Math.cos(a)*55,position.y+28,position.z-Math.sin(a)*55);
+    const look=new THREE.Vector3(position.x+Math.cos(a)*75,position.y-4,position.z+Math.sin(a)*75);
+    if(!initialized.current){camera.position.copy(desired);initialized.current=true;}
+    else camera.position.lerp(desired,1-Math.pow(0.0005,Math.min(delta,0.05)));
     camera.lookAt(look);
   });
   return null;
@@ -98,22 +99,6 @@ function TargetMarker({target,onSelect}){
     <mesh><sphereGeometry args={[1.5,24,16]}/><meshStandardMaterial emissive={new THREE.Color("#43ff9a")} emissiveIntensity={2}/></mesh>
     <mesh rotation={[Math.PI/2,0,0]}><torusGeometry args={[3,.08,12,48]}/><meshStandardMaterial emissive={new THREE.Color("#43ff9a")} emissiveIntensity={1.5}/></mesh>
   </group>;
-}
-
-function GroundPicker({onPick}){
-  const {camera,raycaster,gl}=useThree();
-  const plane=useMemo(()=>new THREE.Plane(new THREE.Vector3(0,1,0),-10),[]);
-  const point=new THREE.Vector3();
-  return <mesh rotation={[-Math.PI/2,0,0]} position={[0,0,0]} visible={false}
-    onPointerDown={e=>{
-      e.stopPropagation();
-      const r=gl.domElement.getBoundingClientRect();
-      const mouse=new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);
-      raycaster.setFromCamera(mouse,camera);
-      if(raycaster.ray.intersectPlane(plane,point)) onPick({x:Math.round(THREE.MathUtils.clamp(point.x,-45,75)),y:10,z:Math.round(THREE.MathUtils.clamp(point.z,-45,45))});
-    }}>
-    <planeGeometry args={[140,100]}/>
-  </mesh>;
 }
 
 function App(){
@@ -141,8 +126,6 @@ function App(){
   const [sensorDistance,setSensorDistance]=useState(12);
   const [message,setMessage]=useState("System ready");
   const [obstacles,setObstacles]=useState(baseObstacles);
-  const [viewMode,setViewMode]=useState("CHASE");
-  const [manualMode,setManualMode]=useState(true);
 
   pathRef.current=path;
 
@@ -188,12 +171,12 @@ function App(){
 
   async function start(){
     if(!path.length){setMessage("Select a target and calculate a route first");return}
-    takeoffSound(); returningRef.current=false;setAuto(true);setManualMode(false);
+    takeoffSound(); returningRef.current=false;setAuto(true);
     const s=gps?"AUTONOMOUS":"EMERGENCY AUTOPILOT";setStatus(s);setPhase(gps?"TAKEOFF / NAVIGATING":"GPS-DENIED NAVIGATION");setMessage("Rotor spin-up — autonomous flight active");
     await patchMission({status:s,phase:gps?"TAKEOFF / NAVIGATING":"GPS-DENIED NAVIGATION",gpsStatus:gps?"CONNECTED":"DENIED"});
   }
 
-  async function stop(){setAuto(false);setSpeed(0);setManualMode(true);setStatus("STOPPED");setPhase("MANUAL");setMessage("Mission paused");await patchMission({status:"STOPPED",phase:"MANUAL"})}
+  async function stop(){setAuto(false);setSpeed(0);setStatus("STOPPED");setPhase("MANUAL");setMessage("Mission paused");await patchMission({status:"STOPPED",phase:"MANUAL"})}
 
   async function addObstacle(){
     const next=path[idx.current]||{x:pos.x+7,y:pos.y,z:pos.z};
@@ -209,7 +192,7 @@ function App(){
     replanLock.current=true;setAuto(false);setSpeed(0);setSensor(true);setStatus("OBSTACLE DETECTED");setPhase("REAL-TIME REPLANNING");setMessage("Sensor lock — recalculating safe 3D route");
     const p=await calculate(pos,target);
     if(!p.length){setStatus("ROUTE BLOCKED");setPhase("WAITING FOR CLEAR PATH");setMessage("No safe route. Hold position.");replanLock.current=false;return}
-    idx.current=0;setPath(p);setSensor(false);setAuto(true);setManualMode(false);setStatus(gps?"AUTONOMOUS":"EMERGENCY AUTOPILOT");setPhase("REPLANNED NAVIGATION");setMessage("New safe route locked");
+    idx.current=0;setPath(p);setSensor(false);setAuto(true);setStatus(gps?"AUTONOMOUS":"EMERGENCY AUTOPILOT");setPhase("REPLANNED NAVIGATION");setMessage("New safe route locked");
     await patchMission({status:gps?"AUTONOMOUS":"EMERGENCY AUTOPILOT",phase:"REPLANNED NAVIGATION",route:p});
     setTimeout(()=>{replanLock.current=false},1200);
   }
@@ -235,7 +218,7 @@ function App(){
     const s=io(SOCKET_URL);socketRef.current=s;
     s.on("connect",()=>setPhoneConnected(true));s.on("disconnect",()=>setPhoneConnected(false));
     s.on("phone-control",cmd=>{setPhoneCommand(cmd);
-      if(cmd==="START")startRef.current?.(); else if(cmd==="STOP")stopRef.current?.(); else if(cmd==="GPS_TOGGLE")disconnectRef.current?.(); else if(cmd==="EMERGENCY"){setGps(false);if(pathRef.current.length){setAuto(true);setManualMode(false);setStatus("EMERGENCY AUTOPILOT");setPhase("PHONE EMERGENCY CONTROL");setMessage("Emergency autopilot activated from remote")}else setMessage("Calculate a route before emergency mode")} else manualMove(cmd);
+      if(cmd==="START")startRef.current?.(); else if(cmd==="STOP")stopRef.current?.(); else if(cmd==="GPS_TOGGLE")disconnectRef.current?.(); else if(cmd==="EMERGENCY"){setGps(false);if(pathRef.current.length){setAuto(true);setStatus("EMERGENCY AUTOPILOT");setPhase("PHONE EMERGENCY CONTROL");setMessage("Emergency autopilot activated from remote")}else setMessage("Calculate a route before emergency mode")} else manualMove(cmd);
     });
     return()=>s.disconnect();
   },[]);
@@ -281,8 +264,8 @@ function App(){
   return <div className="app">
     <header className="topbar"><div><h1>NAVIGATE-X <span>◈</span></h1><p>3D GPS-DENIED AUTONOMOUS FLIGHT LAB</p></div><div className="top-status"><span className={gps?"ok":"danger"}>● GPS {gps?"LOCK":"DENIED"}</span><span className={phoneConnected?"ok":"danger"}>● REMOTE {phoneConnected?"LINKED":"OFFLINE"}</span></div></header>
     <main className="sim-layout">
-      <section className="scene">
-        <Canvas shadows camera={{position:[75,45,75],fov:58}}>
+      <section className="scene" onContextMenu={e=>e.preventDefault()}>
+        <Canvas shadows camera={{position:[0,36,55],fov:58}} gl={{antialias:true}} style={{touchAction:"none"}}>
           <color attach="background" args={["#030914"]}/>
           <fog attach="fog" args={["#030914",70,150]}/>
           <ambientLight intensity={.65}/><directionalLight castShadow position={[20,80,20]} intensity={2.2}/>
@@ -294,19 +277,18 @@ function App(){
           <DroneSensors position={pos} obstacles={obstacles} range={14} onDetection={({detected,distance:front})=>{setSensor(detected);setSensorDistance(front);if(detected&&front<3.5&&auto)replan()}}/>
           <Route path={path}/>
           <TargetMarker target={target}/>
-          <GroundPicker onPick={p=>{setTarget(p);setMessage("Target selected at "+p.x+", "+p.y+", "+p.z);}}/>
           <DroneCamera position={pos} heading={heading} enabled={viewMode==="FPV"}/>
           {viewMode!=="FPV"&&<OrbitControls enableDamping dampingFactor={.08}/>}
         </Canvas>
         <div className="flight-hud"><div className="hud-title">LIVE FLIGHT VIEW <span className="pulse">● LIVE</span></div><div className="hud-row"><b>{status}</b><span>ALT {pos.y.toFixed(1)}m</span><span>SPD {speed.toFixed(1)}m/s</span><span>HDG {heading.toFixed(0)}°</span></div><div className="hud-row muted">POSITION {pos.x.toFixed(1)} / {pos.y.toFixed(1)} / {pos.z.toFixed(1)} · TARGET {target.x} / {target.y} / {target.z}</div></div>
-        <div className="view-switch"><button className={viewMode==="CHASE"?"active":""} onClick={()=>setViewMode("CHASE")}>CHASE 3D</button><button className={viewMode==="FPV"?"active":""} onClick={()=>setViewMode("FPV")}>DRONE FPV</button></div>
+        <div className="view-switch"><span className="active">AUTONOMOUS CHASE CAMERA · LOCKED</span></div>
         <div className="mini-monitor"><div className="mini-title">MISSION RADAR</div><div className="radar"><div className="radar-drone" style={{left:`${50+pos.x*.45}%`,top:`${50+pos.z*.45}%`}}>◆</div><div className="radar-target" style={{left:`${50+target.x*.45}%`,top:`${50+target.z*.45}%`}}>✦</div></div><small>D = DRONE · T = TARGET</small></div>
       </section>
       <aside className="control-panel">
         <div className="panel-heading"><span>MISSION CONTROL</span><small>REMOTE + AUTONOMOUS</small></div>
-        <div className="target-box"><div className="section-label">TARGET LOCATION</div><div className="coord-grid"><label>X<input type="number" value={target.x} onChange={e=>setTarget({...target,x:+e.target.value})}/></label><label>ALT<input type="number" value={target.y} onChange={e=>setTarget({...target,y:Math.max(2,+e.target.value)})}/></label><label>Z<input type="number" value={target.z} onChange={e=>setTarget({...target,z:+e.target.value})}/></label></div><p className="hint">Tip: click any point in the 3D city to select the target.</p></div>
+        <div className="target-box"><div className="section-label">TARGET LOCATION</div><div className="coord-grid"><label>X<input type="number" value={target.x} onChange={e=>setTarget({...target,x:+e.target.value})}/></label><label>ALT<input type="number" value={target.y} onChange={e=>setTarget({...target,y:Math.max(2,+e.target.value)})}/></label><label>Z<input type="number" value={target.z} onChange={e=>setTarget({...target,z:+e.target.value})}/></label></div><p className="hint">Camera locked. The environment is frozen; only the drone follows the calculated route.</p></div>
         <div className="button-grid"><button onClick={()=>calculate()}>CALCULATE 3D A*</button><button onClick={create}>CREATE MISSION</button><button className="primary" onClick={start}>TAKEOFF / START</button><button onClick={stop}>STOP / LAND</button><button className="warning" onClick={addObstacle}>＋ LIVE OBSTACLE</button><button className="warning" onClick={disconnect}>{gps?"GPS DISCONNECT":"GPS RESTORE"}</button></div>
-        <div className="manual-box"><div className="section-label">ADVANCED MANUAL CONTROLLER</div><button className={manualMode?"manual-active":""} onClick={()=>setManualMode(true)}>MANUAL MODE</button><div className="dpad"><button onClick={()=>manualMove("UP_LEFT")}>↖</button><button onClick={()=>manualMove("UP")}>↑</button><button onClick={()=>manualMove("UP_RIGHT")}>↗</button><button onClick={()=>manualMove("LEFT")}>←</button><button onClick={()=>stop()}>■</button><button onClick={()=>manualMove("RIGHT")}>→</button><button onClick={()=>manualMove("DOWN_LEFT")}>↙</button><button onClick={()=>manualMove("DOWN")}>↓</button><button onClick={()=>manualMove("DOWN_RIGHT")}>↘</button></div></div>
+        <div className="manual-box"><div className="section-label">FLIGHT VIEW LOCK</div><div className="hint">MOUSE / TOUCH CAMERA CONTROL: DISABLED</div><div className="hint">WORLD: FROZEN · DRONE: AUTONOMOUS</div></div>
         <MissionMonitor status={status} phase={phase} gps={gps} waypoints={path.length} missionId={mission?._id} phoneCommand={phoneCommand} phoneConnected={phoneConnected} sensor={sensor}/>
         <TelemetryPanel data={{...pos,altitude:pos.y,speed,distance,heading,sensorDistance}}/>
         <div className="message">{message}</div>
