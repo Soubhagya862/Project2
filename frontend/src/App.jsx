@@ -98,224 +98,132 @@ function noisy(v, amount = SENSOR_NOISE) {
 function Drone({ position, heading, active }) {
   const group = useRef();
   const rotors = useRef([]);
-  const blades = useRef([]);
-  const lights = useRef([]);
-  const motion = useRef({ bob: 0 });
+  const laserLights = useRef([]);
 
   useFrame((_, dt) => {
     if (!group.current) return;
+    const target = new THREE.Vector3(position.x, position.y, position.z);
+    group.current.position.lerp(target, 1 - Math.exp(-dt * 8));
 
-    // Smooth physical-looking movement instead of snapping the model to
-    // React state every frame.
-    const targetPosition = new THREE.Vector3(position.x, position.y, position.z);
-    const smooth = 1 - Math.exp(-dt * (active ? 7 : 4));
-    group.current.position.lerp(targetPosition, smooth);
-
-    const targetRotation = heading * Math.PI / 180;
-    let rotationDelta = targetRotation - group.current.rotation.y;
-    rotationDelta = Math.atan2(Math.sin(rotationDelta), Math.cos(rotationDelta));
-    group.current.rotation.y += rotationDelta * Math.min(1, dt * 8);
+    const targetYaw = heading * Math.PI / 180;
+    let delta = targetYaw - group.current.rotation.y;
+    delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+    group.current.rotation.y += delta * Math.min(1, dt * 9);
 
     const t = performance.now() * 0.001;
-    const hover = active ? Math.sin(t * 2.2) * 0.8 : 0;
-    const banking = active ? Math.sin(t * 1.35) * 0.035 : 0;
-    group.current.position.y += hover * dt;
+    group.current.position.y += (active ? Math.sin(t * 2.1) * 0.45 : 0) * dt;
     group.current.rotation.z = THREE.MathUtils.lerp(
       group.current.rotation.z,
-      banking,
-      Math.min(1, dt * 4)
+      active ? Math.sin(t * 1.25) * 0.035 : 0,
+      Math.min(1, dt * 3.5)
     );
 
-    rotors.current.forEach((r) => {
-      if (r) r.rotation.y += dt * (active ? 95 : 12);
+    rotors.current.forEach(r => {
+      if (r) r.rotation.y += dt * (active ? 105 : 10);
     });
-
-    blades.current.forEach((b) => {
-      if (b) b.material.opacity = active ? 0.24 : 0.12;
-    });
-
-    lights.current.forEach((l, i) => {
+    laserLights.current.forEach((l, i) => {
       if (l) l.material.emissiveIntensity = active
-        ? 2.5 + Math.sin(t * 8 + i) * 1.2
-        : 0.7;
+        ? 3 + Math.sin(t * 9 + i) * 1.2 : 1;
     });
   });
 
-  const motors = [
-    [-8.5, -7.0], [8.5, -7.0],
-    [-8.5, 7.0], [8.5, 7.0]
-  ];
+  // Long-body heavy-lift layout: noticeably longer than tall.
+  const motors = [[-10,-8],[10,-8],[-10,8],[10,8]];
 
   return (
-    <group ref={group} position={[position.x, position.y, position.z]} scale={4.2}>
-      {/* Main heavy-lift armored fuselage */}
+    <group ref={group} position={[position.x,position.y,position.z]} scale={3.4}>
       <mesh castShadow>
-        <capsuleGeometry args={[2.1, 6.8, 10, 32]} />
-        <meshStandardMaterial
-          color="#132631"
-          metalness={0.95}
-          roughness={0.16}
-        />
+        <capsuleGeometry args={[2.5, 9.5, 10, 36]}/>
+        <meshStandardMaterial color="#111f28" metalness={0.96} roughness={0.14}/>
+      </mesh>
+      <mesh position={[0,1.2,0]} scale={[1.35,.55,2.5]} castShadow>
+        <boxGeometry args={[4.2,2.2,6.2]}/>
+        <meshStandardMaterial color="#294a58" metalness={.92} roughness={.18}/>
       </mesh>
 
-      {/* Upper armored spine */}
-      <mesh position={[0, 1.55, 0]} scale={[1.15, 0.42, 2.1]} castShadow>
-        <boxGeometry args={[3.8, 2.0, 5.2]} />
-        <meshStandardMaterial
-          color="#284957"
-          metalness={0.9}
-          roughness={0.2}
-        />
-      </mesh>
-
-      {/* Front sensor dome */}
-      <mesh position={[0, 0.1, -3.65]}>
-        <sphereGeometry args={[1.25, 32, 24]} />
-        <meshStandardMaterial
-          color="#39eaff"
-          emissive="#00b9d6"
-          emissiveIntensity={4}
-          metalness={0.35}
-          roughness={0.08}
-        />
-      </mesh>
-
-      {/* Front protective visor */}
-      <mesh position={[0, 0.85, -3.15]} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[1.25, 0.12, 12, 32]} />
-        <meshStandardMaterial
-          color="#75f1ff"
-          emissive="#0bc6df"
-          emissiveIntensity={2}
-          metalness={0.8}
-        />
-      </mesh>
-
-      {/* Long reinforced arms */}
-      {motors.map(([x, z], i) => (
-        <group key={i} position={[x * 0.48, 0, z * 0.48]}>
-          <mesh rotation={[0, Math.atan2(x, z), 0]} castShadow>
-            <boxGeometry args={[1.15, 0.85, 9.8]} />
-            <meshStandardMaterial
-              color="#213b47"
-              metalness={0.92}
-              roughness={0.18}
-            />
+      {/* Long aerodynamic wings / arms */}
+      {motors.map(([x,z],i)=>(
+        <group key={i} position={[x*.48,0,z*.48]}>
+          <mesh rotation={[0,Math.atan2(x,z),0]} castShadow>
+            <boxGeometry args={[1.25,.9,12.5]}/>
+            <meshStandardMaterial color="#203b47" metalness={.94} roughness={.16}/>
           </mesh>
-
-          {/* Arm accent */}
-          <mesh position={[0, 0.48, z > 0 ? 1.5 : -1.5]}>
-            <boxGeometry args={[1.25, 0.12, 5.0]} />
-            <meshStandardMaterial
-              color="#4fe5f7"
-              emissive="#087d91"
-              emissiveIntensity={1.2}
-              metalness={0.7}
-            />
+          <mesh position={[0,.52,z>0?2.2:-2.2]}>
+            <boxGeometry args={[1.4,.14,6.5]}/>
+            <meshStandardMaterial color="#4fe5f7" emissive="#087d91" emissiveIntensity={1.1}/>
           </mesh>
-
-          {/* Motor housing */}
-          <mesh position={[0, 0.35, z > 0 ? 3.75 : -3.75]} castShadow>
-            <cylinderGeometry args={[1.25, 1.45, 1.1, 28]} />
-            <meshStandardMaterial
-              color="#0b151b"
-              metalness={1}
-              roughness={0.13}
-            />
+          <mesh position={[0,.45,z>0?5.0:-5.0]} castShadow>
+            <cylinderGeometry args={[1.45,1.65,1.2,30]}/>
+            <meshStandardMaterial color="#091319" metalness={1} roughness={.1}/>
           </mesh>
-
-          {/* Motor glow ring */}
-          <mesh position={[0, 0.92, z > 0 ? 3.75 : -3.75]}>
-            <torusGeometry args={[1.0, 0.11, 10, 28]} />
-            <meshStandardMaterial
-              color="#55edff"
-              emissive="#00b8d4"
-              emissiveIntensity={active ? 3 : 0.8}
-            />
+          <mesh position={[0,1.08,z>0?5.0:-5.0]}>
+            <torusGeometry args={[1.15,.12,10,30]}/>
+            <meshStandardMaterial color="#63edff" emissive="#00b8d4" emissiveIntensity={active?3:.8}/>
           </mesh>
-
-          {/* Rotor assembly */}
-          <group
-            ref={(el) => (rotors.current[i] = el)}
-            position={[0, 1.15, z > 0 ? 3.75 : -3.75]}
-          >
-            <mesh ref={(el) => (blades.current[i] = el)}>
-              <boxGeometry args={[6.8, 0.08, 0.26]} />
-              <meshStandardMaterial
-                color="#b9f6ff"
-                transparent
-                opacity={0.24}
-              />
-            </mesh>
-            <mesh rotation={[0, Math.PI / 2, 0]}>
-              <boxGeometry args={[6.8, 0.08, 0.26]} />
-              <meshStandardMaterial
-                color="#b9f6ff"
-                transparent
-                opacity={0.24}
-              />
-            </mesh>
+          <group ref={el=>rotors.current[i]=el} position={[0,1.35,z>0?5.0:-5.0]}>
+            <mesh><boxGeometry args={[8.5,.08,.28]}/><meshStandardMaterial color="#c5f8ff" transparent opacity={active?.25:.12}/></mesh>
+            <mesh rotation={[0,Math.PI/2,0]}><boxGeometry args={[8.5,.08,.28]}/><meshStandardMaterial color="#c5f8ff" transparent opacity={active?.25:.12}/></mesh>
           </group>
+
+          {/* Non-contact laser-like sensor emitters for visual sensing */}
+          <mesh ref={el=>laserLights.current[i]=el} position={[0,.15,z>0?6.0:-6.0]}>
+            <sphereGeometry args={[.3,16,12]}/>
+            <meshStandardMaterial color="#ff4fd8" emissive="#ff198c" emissiveIntensity={2}/>
+          </mesh>
+          <Line
+            points={[[0,.15,z>0?6.2:-6.2],[0,.15,z>0?28:-28]]}
+            color="#ff4fd8" lineWidth={1}
+            transparent opacity={active?.38:.08}
+          />
         </group>
       ))}
 
-      {/* Twin rear stabilizers */}
-      <mesh position={[-1.9, 0.8, 2.65]} rotation={[0, 0, -0.18]}>
-        <boxGeometry args={[0.65, 3.2, 1.4]} />
-        <meshStandardMaterial color="#294c5a" metalness={0.9} roughness={0.18} />
+      {/* Front sensor cluster */}
+      <mesh position={[0,.15,-4.7]}>
+        <sphereGeometry args={[1.45,32,24]}/>
+        <meshStandardMaterial color="#48efff" emissive="#00b9d6" emissiveIntensity={4} metalness={.3} roughness={.08}/>
       </mesh>
-      <mesh position={[1.9, 0.8, 2.65]} rotation={[0, 0, 0.18]}>
-        <boxGeometry args={[0.65, 3.2, 1.4]} />
-        <meshStandardMaterial color="#294c5a" metalness={0.9} roughness={0.18} />
+      <mesh position={[0,.85,-4.15]} rotation={[Math.PI/2,0,0]}>
+        <torusGeometry args={[1.45,.13,12,32]}/>
+        <meshStandardMaterial color="#7af4ff" emissive="#0bc6df" emissiveIntensity={2}/>
       </mesh>
 
-      {/* Side navigation lights */}
-      {[-2.0, 2.0].map((x, i) => (
-        <mesh key={i} ref={(el) => (lights.current[i] = el)} position={[x, 0.15, -2.3]}>
-          <sphereGeometry args={[0.22, 16, 12]} />
-          <meshStandardMaterial
-            color="#69f5ff"
-            emissive="#00d5ef"
-            emissiveIntensity={1}
-          />
-        </mesh>
-      ))}
+      {/* Rear stabilizers */}
+      <mesh position={[-2.3,.9,3.2]} rotation={[0,0,-.2]}>
+        <boxGeometry args={[.7,3.8,1.5]}/>
+        <meshStandardMaterial color="#2b5060" metalness={.9} roughness={.18}/>
+      </mesh>
+      <mesh position={[2.3,.9,3.2]} rotation={[0,0,.2]}>
+        <boxGeometry args={[.7,3.8,1.5]}/>
+        <meshStandardMaterial color="#2b5060" metalness={.9} roughness={.18}/>
+      </mesh>
 
       {/* Landing gear */}
-      {[-1.9, 1.9].map((x) => (
-        <group key={x} position={[x, -2.1, 0.8]}>
-          <mesh rotation={[0, 0, x < 0 ? -0.12 : 0.12]}>
-            <cylinderGeometry args={[0.16, 0.2, 2.7, 12]} />
-            <meshStandardMaterial color="#182b34" metalness={0.9} roughness={0.22} />
+      {[-2.2,2.2].map(x=>(
+        <group key={x} position={[x,-2.25,.9]}>
+          <mesh rotation={[0,0,x<0?-.12:.12]}>
+            <cylinderGeometry args={[.18,.22,3.1,12]}/>
+            <meshStandardMaterial color="#15262e" metalness={.9}/>
           </mesh>
-          <mesh position={[0, -1.25, 0]}>
-            <boxGeometry args={[2.8, 0.18, 0.5]} />
-            <meshStandardMaterial color="#101c22" metalness={0.95} roughness={0.2} />
+          <mesh position={[0,-1.45,0]}>
+            <boxGeometry args={[3.2,.2,.55]}/>
+            <meshStandardMaterial color="#0c171d" metalness={.96}/>
           </mesh>
         </group>
       ))}
 
-      {/* Underside sensor array */}
-      <mesh position={[0, -1.85, -0.7]}>
-        <cylinderGeometry args={[0.75, 0.9, 0.45, 24]} />
-        <meshStandardMaterial
-          color="#0c1b22"
-          metalness={0.95}
-          roughness={0.1}
-        />
+      {/* Underside sensor pod */}
+      <mesh position={[0,-2.1,-.8]}>
+        <cylinderGeometry args={[.85,1,.5,26]}/>
+        <meshStandardMaterial color="#09181f" metalness={.96}/>
       </mesh>
-      <mesh position={[0, -2.1, -0.7]}>
-        <sphereGeometry args={[0.38, 20, 16]} />
-        <meshStandardMaterial
-          color="#65f4ff"
-          emissive="#00c8e8"
-          emissiveIntensity={3}
-        />
+      <mesh position={[0,-2.38,-.8]}>
+        <sphereGeometry args={[.42,20,16]}/>
+        <meshStandardMaterial color="#65f4ff" emissive="#00c8e8" emissiveIntensity={3}/>
       </mesh>
     </group>
   );
 }
-
 function Marker({ point, type }) {
   const color = type === "target" ? "#4dff9a" : "#ffd34d";
   return (
@@ -371,8 +279,8 @@ function Scene({ position, heading, target, route, detectedObstacle, sensorRange
     if (flightView) {
       // Stable third-person flight view: the complete drone stays visible,
       // but it is deliberately kept far enough from the camera.
-      const distanceBehind = 62;
-      const heightAbove = 28;
+      const distanceBehind = 75;
+      const heightAbove = 32;
       const cameraPosition = new THREE.Vector3(
         position.x - forward.x * distanceBehind,
         position.y + heightAbove,
@@ -387,9 +295,9 @@ function Scene({ position, heading, target, route, detectedObstacle, sensorRange
       // Look slightly ahead of the drone so its direction and environment
       // remain visible without making the drone fill the screen.
       const lookPoint = new THREE.Vector3(
-        position.x + forward.x * 125,
-        position.y + 8,
-        position.z + forward.z * 125
+        position.x + forward.x * 155,
+        position.y + 10,
+        position.z + forward.z * 155
       );
       camera.current.lookAt(lookPoint);
 
