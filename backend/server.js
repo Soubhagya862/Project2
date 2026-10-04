@@ -19,7 +19,10 @@ const io=new SocketIOServer(httpServer,{
 
 const connectedClients=new Map();
 
+const connectedClients=new Map();
+
 io.on("connection",socket=>{
+  connectedClients.set(socket.id,{role:"unknown"});
   connectedClients.set(socket.id,{role:"unknown"});
   socket.emit("server-ready",{service:"NAVIGATE-X",connectedAt:Date.now()});
   socket.on("register-client",({role}={})=>{
