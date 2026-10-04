@@ -69,7 +69,7 @@ app.post("/api/flight-command",(req,res)=>{
   const command=typeof req.body?.command==="string"?req.body.command:"";
   if(!command)return res.status(400).json({ok:false,error:"command required"});
   latestFlightCommand={id:latestFlightCommand.id+1,command,time:Date.now()};
-  io.emit("flight-control-command",command);
+  io.emit("flight-control-command",latestFlightCommand);
   res.json({ok:true,...latestFlightCommand});
 });
 
