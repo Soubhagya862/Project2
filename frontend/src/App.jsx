@@ -145,7 +145,7 @@ function TargetMarker({target,home=false}){
 }
 
 function App(){
- const socketRef=useRef(null),idx=useRef(0),pathRef=useRef([]),missionRef=useRef(null),replanLock=useRef(false),returning=useRef(false),manualAnnounced=useRef(false);
+ const socketRef=useRef(null),idx=useRef(0),pathRef=useRef([]),missionRef=useRef(null),replanLock=useRef(false),returning=useRef(false),manualAnnounced=useRef(false),manualMotionRef=useRef({vx:0,vy:0,vz:0,yaw:0,until:0});
  const [pos,setPos]=useState({...HOME}),[target,setTarget]=useState({x:700,y:60,z:450}),[path,setPath]=useState([]);
  const [obstacles,setObstacles]=useState(BASE_OBSTACLES),[gps,setGps]=useState(true),[mode,setMode]=useState("MANUAL");
  const [status,setStatus]=useState("READY"),[phase,setPhase]=useState("IDLE"),[speed,setSpeed]=useState(0),[heading,setHeading]=useState(0);
@@ -190,177 +190,38 @@ function App(){
 
  function manualMove(cmd){
    if(pos.y<=2.5 && cmd!=="ASCEND"){setMessage("Drone is on the ground — press TAKE OFF first");return}
-   setMode("MANUAL");setStatus("MANUAL FLIGHT");setPhase("REMOTE PILOT CONTROL");setSpeed(8);
-   if(!manualAnnounced.current){manualAnnounced.current=true;speak("Remote control active");setMessage("Remote control active — drone is flying by controller");}
-   const step=12, altitudeStep=6;
-   const map={
-     UP:[0,-step],DOWN:[0,step],LEFT:[-step,0],RIGHT:[step,0],
-     UP_LEFT:[-step,-step],UP_RIGHT:[step,-step],DOWN_LEFT:[-step,step],DOWN_RIGHT:[step,step]
-   };
-   if(cmd==="ASCEND"){
-     setPos(p=>({...p,y:THREE.MathUtils.clamp(p.y+altitudeStep,5,WORLD.maxY)}));
-     setSpeed(4);setPhase("ASCENDING");return;
-   }
-   if(cmd==="DESCEND"){
-     const nextY=THREE.MathUtils.clamp(pos.y-altitudeStep,2,WORLD.maxY);
-     setPos(p=>({...p,y:nextY}));
-     setSpeed(nextY<=2.5?0:4);setPhase(nextY<=2.5?"LANDED":"DESCENDING");return;
-   }
-   if(cmd==="YAW_LEFT"){setHeading(h=>h-15);setSpeed(0);setPhase("YAW LEFT");return}
-   if(cmd==="YAW_RIGHT"){setHeading(h=>h+15);setSpeed(0);setPhase("YAW RIGHT");return}
-   const [dx,dz]=map[cmd]||[0,0]; if(!map[cmd])return;
-   setHeading(Math.atan2(-dz,-dx)*180/Math.PI);
-   setPos(p=>({x:THREE.MathUtils.clamp(p.x+dx,WORLD.minX,WORLD.maxX),y:p.y,z:THREE.MathUtils.clamp(p.z+dz,WORLD.minZ,WORLD.maxZ)}));
+   setMode("MANUAL");setStatus("MANUAL FLIGHT");setPhase("REMOTE PILOT CONTROL");
+   if(!manualAnnounced.current){manualAnnounced.current=true;speak("Remote control active");setMessage("Remote control active — smooth flight control");}
+
+   const now=performance.now();
+   const speed=24;
+   const altitudeSpeed=10;
+   const yawSpeed=75;
+   const h=heading*Math.PI/180;
+   let vx=0,vy=0,vz=0,yaw=0;
+
+   // The controller uses the drone's heading: FWD/BACK are body-relative,
+   // while LEFT/RIGHT are smooth lateral movement.
+   const forwardX=Math.cos(h), forwardZ=Math.sin(h);
+   const rightX=-Math.sin(h), rightZ=Math.cos(h);
+
+   if(cmd==="UP"){vx=forwardX*speed;vz=forwardZ*speed}
+   else if(cmd==="DOWN"){vx=-forwardX*speed;vz=-forwardZ*speed}
+   else if(cmd==="LEFT"){vx=-rightX*speed;vz=-rightZ*speed}
+   else if(cmd==="RIGHT"){vx=rightX*speed;vz=rightZ*speed}
+   else if(cmd==="UP_LEFT"){vx=forwardX*speed-rightX*speed*.7;vz=forwardZ*speed-rightZ*speed*.7}
+   else if(cmd==="UP_RIGHT"){vx=forwardX*speed+rightX*speed*.7;vz=forwardZ*speed+rightZ*speed*.7}
+   else if(cmd==="DOWN_LEFT"){vx=-forwardX*speed-rightX*speed*.7;vz=-forwardZ*speed-rightZ*speed*.7}
+   else if(cmd==="DOWN_RIGHT"){vx=-forwardX*speed+rightX*speed*.7;vz=-forwardZ*speed+rightZ*speed*.7}
+   else if(cmd==="ASCEND"){vy=altitudeSpeed}
+   else if(cmd==="DESCEND"){vy=-altitudeSpeed}
+   else if(cmd==="YAW_LEFT"){yaw=yawSpeed}
+   else if(cmd==="YAW_RIGHT"){yaw=-yawSpeed}
+   else return;
+
+   manualMotionRef.current={vx,vy,vz,yaw,until:now+420};
+   setSpeed(Math.hypot(vx,vz)+Math.abs(vy));
+   if(yaw) setPhase(cmd==="YAW_LEFT"?"YAW LEFT":"YAW RIGHT");
+   else if(vy>0)setPhase("ASCENDING");
+   else if(vy<0)setPhase("DESCENDING");
  }
-
- async function startAutopilot(){
-   if(takeoffCountdown!==null)return;
-   if(destinationChosen && !path.length){
-     const r=await calculate();
-     if(!r.length)return;
-   }
-   setStatus("TAKEOFF PREPARING");setPhase("TAKEOFF COUNTDOWN");setSpeed(0);
-   for(let i=5;i>0;i--){setTakeoffCountdown(i);await new Promise(res=>setTimeout(res,1000))}
-   setTakeoffCountdown(null);
-   setPos(p=>({...p,y:30}));
-   setStatus("AIRBORNE");setPhase("MANUAL FLIGHT READY");setMode("MANUAL");setSpeed(0);setLanding(false);manualAnnounced.current=false;
-   setMessage("Drone is airborne — use phone controller to fly");
-   speak("Your drone is ready to fly");
- }
-
- async function stopFlight(){
-   setLanding(false);setMode("MANUAL");setStatus("LANDING");setPhase("REMOTE LAND COMMAND");setSpeed(3);
-   const startY=pos.y;
-   if(startY<=2.5){setPos(p=>({...p,y:2}));setSpeed(0);setStatus("LANDED");setPhase("LANDED");return}
-   const steps=Math.max(1,Math.ceil((startY-2)/2));
-   for(let i=1;i<=steps;i++){await new Promise(r=>setTimeout(r,80));setPos(p=>({...p,y:Math.max(2,startY-(startY-2)*(i/steps))}))}
-   setSpeed(0);setStatus("LANDED");setPhase("LANDED");await patchMission({status:"LANDED",phase:"LANDED"});
- }
-
- async function emergencyAutopilot(){
-   if(!destinationChosen){setMessage("Choose destination before emergency test");return}
-   if(takeoffCountdown!==null)return;
-   setGps(false);setMode("EMERGENCY AUTOPILOT");
-   const r=await calculate(pos,target);if(!r.length)return;
-   for(let i=5;i>0;i--){setTakeoffCountdown(i);await new Promise(res=>setTimeout(res,1000))}
-   setTakeoffCountdown(null);setPos(p=>({...p,y:30}));setStatus("READY FOR TAKEOFF");setPhase("TAKEOFF COMPLETE");setSpeed(0);
-   speak("Your drone is ready to take off");await new Promise(res=>setTimeout(res,700));
-   setStatus("EMERGENCY AUTOPILOT");setPhase("GPS DENIED — SENSOR NAVIGATION");setSpeed(50);setMessage("Your drone is going towards the location");speak("Your drone is going towards the location");await patchMission({gpsStatus:"DENIED",status:"EMERGENCY AUTOPILOT",phase:"GPS DENIED — SENSOR NAVIGATION",route:r});
- }
-
- async function toggleGps(){
-   const next=!gps;setGps(next);
-   if(!next){await emergencyAutopilot()}else{setStatus("GPS RESTORED");setPhase("GPS CONNECTED");setMessage("GPS restored — awaiting pilot/autopilot command");if(mode==="EMERGENCY AUTOPILOT")setMode("MANUAL");await patchMission({gpsStatus:"CONNECTED",status:"READY",phase:"GPS CONNECTED"})}
- }
-
- async function addLiveObstacle(){
-   const n=path[idx.current]||{x:pos.x+8,y:pos.y,z:pos.z};
-   const o={id:"dynamic-"+Date.now(),position:{x:n.x,y:n.y,z:n.z},size:{x:6,y:8,z:6},type:"DYNAMIC"};
-   setObstacles(v=>[...v,o]);setSensor(true);setMessage("LIVE OBSTACLE ENTERED — REPLANNING");
-   if(mode!=="MANUAL")await replan([...obstacles,o]);
- }
-
- async function replan(currentObstacles=obstacles){
-   if(replanLock.current)return;replanLock.current=true;setSensor(true);setStatus("OBSTACLE DETECTED");setPhase("REAL-TIME REPLANNING");setSpeed(0);
-   try{
-    const r=await fetch(API+"/routes/replan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({start:pos,goal:returning.current?HOME:target,obstacles:currentObstacles})});
-    const d=r.ok?await r.json():null;const route=d?.route||[];
-    if(!route.length){setStatus("ROUTE BLOCKED");setPhase("HOLD POSITION");setMessage("No safe route found — drone holding");return}
-    setPath(route);idx.current=0;setSensor(false);setMode(gps?"AUTOPILOT":"EMERGENCY AUTOPILOT");setStatus(gps?"AUTOPILOT ACTIVE":"EMERGENCY AUTOPILOT");setPhase("REPLANNED SAFE ROUTE");setSpeed(50);setMessage("Obstacle avoided — new route locked");await patchMission({status:gps?"AUTOPILOT":"EMERGENCY AUTOPILOT",phase:"REPLANNED SAFE ROUTE",route});
-   }catch{setStatus("REPLANNING ERROR");setMessage("Backend replan unavailable")}finally{setTimeout(()=>{replanLock.current=false},700)}
- }
-
- const commandHandlerRef=useRef(null);
- commandHandlerRef.current=async cmd=>{
-   setPhoneCommand(cmd);
-   setRemoteControl(cmd);
-   if(cmd==="START")return startAutopilot();
-   if(cmd==="STOP")return stopFlight();
-   if(cmd==="LAND")return stopFlight();
-   if(cmd==="EMERGENCY")return emergencyAutopilot();
-   if(cmd==="GPS_TOGGLE")return toggleGps();
-   if(cmd.startsWith("TARGET:")){
-     try{const t=JSON.parse(cmd.slice(7));await chooseTarget(t);setRemoteControl("TARGET")}
-     catch{setMessage("Invalid remote target")}
-     return;
-   }
-   manualMove(cmd);
- };
-
- useEffect(()=>{
-  const s=io(SOCKET_URL,{transports:["websocket","polling"],reconnection:true});
-  socketRef.current=s;
-  s.on("connect",()=>setPhoneConnected(true));
-  s.on("disconnect",()=>setPhoneConnected(false));
-  s.on("flight-control-command",cmd=>commandHandlerRef.current?.(cmd));
-  return()=>s.disconnect();
- },[]);
-
- useEffect(()=>{
-  if(!["AUTOPILOT","EMERGENCY AUTOPILOT"].includes(mode)||!path.length)return;
-  let alive=true;
-  const timer=setInterval(async()=>{
-   if(!alive)return;
-   const n=path[idx.current];
-   if(!n){clearInterval(timer);setSpeed(0);setLanding(true);setStatus(returning.current?"HOME ARRIVAL":"TARGET REACHED");setPhase("LANDING");setMessage(returning.current?"Returning home — landing":"Target reached — precision landing");return}
-   if(isBlocked(n)){await replan();return}
-   const d=distance(pos,n),step=Math.min(3.5,d);
-   if(d<.05){idx.current++;return}
-   const ratio=step/d;
-   const next={x:pos.x+(n.x-pos.x)*ratio,y:pos.y+(n.y-pos.y)*ratio,z:pos.z+(n.z-pos.z)*ratio};
-   setHeading(Math.atan2(n.z-pos.z,n.x-pos.x)*180/Math.PI);setPos(next);setSpeed(10);
-   idx.current=distance(next,n)<.15?idx.current+1:idx.current;
-  },70);
-  return()=>{alive=false;clearInterval(timer)}
- },[mode,path,pos,obstacles]);
-
- useEffect(()=>{
-  if(!landing)return;
-  const timer=setTimeout(async()=>{
-   setPos(p=>({...p,y:returning.current?HOME.y:target.y}));setSpeed(0);setStatus(returning.current?"MISSION COMPLETE":"LANDED");setPhase(returning.current?"HOME LANDED":"WAITING 10s");
-   await patchMission({status:returning.current?"MISSION COMPLETE":"LANDED",phase:returning.current?"HOME LANDED":"WAITING 10s"});
-   if(!returning.current){
-    await new Promise(r=>setTimeout(r,10000));returning.current=true;
-    const r=await calculate({...pos,y:target.y},HOME);
-    if(!r.length){setStatus("RETURN ROUTE BLOCKED");setPhase("RETURN FAILED");return}
-    setPath(r);idx.current=0;setLanding(false);setMode(gps?"AUTOPILOT":"EMERGENCY AUTOPILOT");setStatus("RETURNING HOME");setPhase("AUTONOMOUS RETURN TO HOME");setSpeed(10);setMessage("10-second landing wait complete — returning home");await patchMission({status:"RETURNING HOME",phase:"AUTONOMOUS RETURN TO HOME",route:r});
-   }
-  },1200);
-  return()=>clearTimeout(timer)
- },[landing]);
-
- useEffect(()=>{
-  const timer=setInterval(()=>{
-    socketRef.current?.emit("phone-telemetry",{x:pos.x,y:pos.y,z:pos.z,speed,heading,gps:gps?"CONNECTED":"DENIED",status,phase,mode,target,home:HOME,distanceToTarget:distance(pos,target),sensorDistance});
-    if(mission?._id){
-      fetch(API+"/telemetry",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({missionId:mission._id,position:pos,altitude:pos.y,speed,heading,gpsStatus:gps?"CONNECTED":"DENIED",obstacleDetected:sensor,sensorDistance,status,phase,mode})}).catch(()=>{});
-    }
-  },400);
-  return()=>clearInterval(timer);
- },[mission,pos,speed,heading,gps,sensor,sensorDistance,status,phase,mode,target]);
-
- const dist=distance(pos,target),eta=Math.ceil(dist/50);
- return <div className="app">
-  <header className="topbar"><div><h1>NAVIGATE-X <span>◈</span></h1><p>GPS-DENIED AUTONOMOUS NAVIGATION SIMULATOR</p></div><div className="top-status"><span className={gps?"ok":"danger"}>● GPS {gps?"CONNECTED":"LOST"}</span><span className={phoneConnected?"ok":"danger"}>● PHONE {phoneConnected?"LINKED":"OFFLINE"}</span><span>MODE {mode}</span></div></header>
-  <main className="sim-layout">
-   <section className="scene" onContextMenu={e=>e.preventDefault()}>
-    <Canvas shadows camera={{position:[0,28,45],fov:62}} gl={{antialias:true}} style={{touchAction:"none"}}>
-     <color attach="background" args={["#87a9c1"]}/><fog attach="fog" args={["#87a9c1",100,210]}/>
-     <ambientLight intensity={1.5}/><directionalLight castShadow position={[30,80,20]} intensity={3}/><hemisphereLight intensity={1.2} groundColor="#263b2a" skyColor="#b8d7ed"/>
-     <Terrain/>
-     {obstacles.map(o=><ObstacleView key={o.id||JSON.stringify(o.position)} o={o}/>)}<DroneModel position={pos} heading={heading} flying={flying}/>
-     <DroneSensors position={pos} obstacles={obstacles} range={18} onDetection={({detected,distance:front})=>{setSensor(detected);setSensorDistance(front);if(detected&&front<4&&["AUTOPILOT","EMERGENCY AUTOPILOT"].includes(mode))replan()}}/>
-     <Route path={path} returning={returning.current}/><TargetMarker target={target}/><TargetMarker target={HOME} home/>
-     <DroneCamera position={pos} heading={heading}/>
-    </Canvas>
-    <div className="flight-hud"><div className="hud-title">DRONE LIVE VIEW <span className="pulse">● LIVE</span></div><div className="hud-row"><b>{status}</b><span>MODE {mode}</span><span>ALT {pos.y.toFixed(1)}m</span><span>SPD {speed.toFixed(1)}m/s</span><span>HDG {heading.toFixed(0)}°</span></div><div className="hud-row muted">DRONE {pos.x.toFixed(1)} / {pos.y.toFixed(1)} / {pos.z.toFixed(1)} · TARGET {target.x} / {target.y} / {target.z} · ETA {eta}s</div></div>
-    <div className="camera-badge">FPV / CHASE CAMERA · LOCKED</div>
-    <div className="drone-reticle">+</div>
-    <div className="mini-monitor"><div className="mini-title">LIVE TRACKING RADAR</div><div className="radar"><div className="radar-line"></div><div className="radar-drone" style={{left:`${50+pos.x*.35}%`,top:`${50+pos.z*.35}%`}}>◆</div><div className="radar-target" style={{left:`${50+target.x*.35}%`,top:`${50+target.z*.35}%`}}>✦</div><div className="radar-home" style={{left:"50%",top:"50%"}}>H</div></div><small>D DRONE · T TARGET · H HOME</small></div>
-   </section>
-
-  </main>
- </div>;
-}
-
-export default App;
