@@ -19,3 +19,13 @@
 .active-control{outline:2px solid #58e7ff!important;box-shadow:0 0 12px rgba(88,231,255,.65)!important;transform:translateY(-1px)}
 
 .dpad-secondary{grid-template-columns:1fr 1.4fr 1fr}.dpad-secondary button{font-size:9px}.control-panel button{cursor:pointer;transition:.12s}.control-panel button:hover{filter:brightness(1.18);transform:translateY(-1px)}.control-panel button:active{transform:translateY(1px)}.control-panel input:focus{border-color:#58e7ff;box-shadow:0 0 0 1px #58e7ff44}.panel p b{float:right}.panel p:last-child{color:#9db7cc;line-height:1.4}.control-panel::-webkit-scrollbar{width:6px}.control-panel::-webkit-scrollbar-thumb{background:#24465d;border-radius:6px}
+/* Clean simulator page: simulation + animated drone + radar only */
+.sim-layout{grid-template-columns:minmax(0,1fr)}
+.sim-radar-overlay{position:absolute;left:18px;bottom:18px;width:205px;padding:9px;background:rgba(3,12,22,.78);border:1px solid #31536b;border-radius:9px;backdrop-filter:blur(6px);z-index:4;pointer-events:none}
+.sim-radar-title{font-size:8px;color:#8ba6be;letter-spacing:1.2px;margin-bottom:6px}
+.sim-radar{height:150px;position:relative;overflow:hidden;border:1px solid #21445d;border-radius:6px;background:radial-gradient(circle,#0c2940,#03101d)}
+.sim-radar-cross{position:absolute;background:#1b5269;opacity:.55}.sim-radar-x{left:0;right:0;top:50%;height:1px}.sim-radar-z{top:0;bottom:0;left:50%;width:1px}
+.sim-radar-ring{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border:1px solid #1b5269;border-radius:50%}.sim-radar-ring1{width:35%;height:35%}.sim-radar-ring2{width:70%;height:70%}
+.sim-radar-sweep{position:absolute;left:50%;top:50%;width:50%;height:1px;transform-origin:left center;background:linear-gradient(90deg,#4dff9a,transparent);animation:sweep 2.2s linear infinite}
+.sim-radar-point{position:absolute;transform:translate(-50%,-50%);font-size:12px;font-weight:900}.sim-radar-home{color:#ffd34d}.sim-radar-drone{color:#58e7ff}.sim-radar-target{color:#4dff9a;font-size:15px}
+@media(max-width:600px){.sim-radar-overlay{width:155px}.sim-radar{height:115px}}
