@@ -295,8 +295,9 @@ function App(){
  useEffect(()=>{
   const s=io(SOCKET_URL,{transports:["websocket","polling"],reconnection:true});
   socketRef.current=s;
-  s.on("connect",()=>setPhoneConnected(true));
+  s.on("connect",()=>{s.emit("register-client",{role:"simulator"});});
   s.on("disconnect",()=>setPhoneConnected(false));
+  s.on("client-status",({role,connected}={})=>{if(role==="phone")setPhoneConnected(Boolean(connected));});
   s.on("flight-control-command",cmd=>commandHandlerRef.current?.(cmd));
   return()=>s.disconnect();
  },[]);
