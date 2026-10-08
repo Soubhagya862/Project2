@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <world name="navigate_x_subterranean">
+    <gravity>0 0 -9.81</gravity>
+    <scene><ambient>0.02 0.02 0.02 1</ambient><background>0.005 0.005 0.008 1</background><shadows>true</shadows></scene>
+    <light name="ceiling_light" type="point"><pose>0 0 7 0 0 0</pose><diffuse>0.25 0.25 0.25 1</diffuse><attenuation><range>18</range></attenuation></light>
+    <model name="floor"><static>true</static><link name="link"><collision name="collision"><geometry><box><size>200 200 0.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>200 200 0.2</size></box></geometry></visual></link><pose>0 0 -0.1 0 0 0</pose></model>
+    <model name="left_wall"><static>true</static><link name="link"><collision name="collision"><geometry><box><size>100 0.5 8</size></box></geometry></collision><visual name="visual"><geometry><box><size>100 0.5 8</size></box></geometry></visual></link><pose>0 -6 4 0 0 0</pose></model>
+    <model name="right_wall"><static>true</static><link name="link"><collision name="collision"><geometry><box><size>100 0.5 8</size></box></geometry></collision><visual name="visual"><geometry><box><size>100 0.5 8</size></box></geometry></visual></link><pose>0 6 4 0 0 0</pose></model>
+    <model name="ceiling"><static>true</static><link name="link"><collision name="collision"><geometry><box><size>100 12 0.5</size></box></geometry></collision><visual name="visual"><geometry><box><size>100 12 0.5</size></box></geometry></visual></link><pose>0 0 8 0 0 0</pose></model>
+    <model name="rock_01"><static>true</static><link name="link"><collision name="collision"><geometry><sphere><radius>1.4</radius></sphere></geometry></collision><visual name="visual"><geometry><sphere><radius>1.4</radius></sphere></geometry></visual></link><pose>12 -2.5 1.4 0 0 0</pose></model>
+    <model name="rock_02"><static>true</static><link name="link"><collision name="collision"><geometry><sphere><radius>1.8</radius></sphere></geometry></collision><visual name="visual"><geometry><sphere><radius>1.8</radius></sphere></geometry></visual></link><pose>25 2 1.8 0 0 0</pose></model>
+    <model name="rock_03"><static>true</static><link name="link"><collision name="collision"><geometry><box><size>4 2 5</size></box></geometry></collision><visual name="visual"><geometry><box><size>4 2 5</size></box></geometry></visual></link><pose>38 -1.5 2.5 0.1 0.2 0</pose></model>
+    <model name="narrow_gate"><static>true</static><link name="link"><collision name="collision"><geometry><box><size>3 1 5</size></box></geometry></collision><visual name="visual"><geometry><box><size>3 1 5</size></box></geometry></visual></link><pose>52 3.7 2.5 0 0 0</pose></model>
+    <model name="dead_end_block"><static>true</static><link name="link"><collision name="collision"><geometry><box><size>7 7 6</size></box></geometry></collision><visual name="visual"><geometry><box><size>7 7 6</size></box></geometry></visual></link><pose>72 0 3 0 0 0</pose></model>
+  </world>
+</sdf>
