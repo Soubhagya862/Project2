@@ -305,6 +305,7 @@ function useController() {
       vertical = (gp.buttons?.[5]?.pressed ? 1 : 0) - (gp.buttons?.[4]?.pressed ? 1 : 0) || vertical;
 
       // A = takeoff, B = land.
+      // A/B are read by the App effect. Keep them as current button states.
       setActions({
         takeoff: Boolean(gp.buttons?.[0]?.pressed),
         land: Boolean(gp.buttons?.[1]?.pressed)
@@ -342,12 +343,11 @@ export default function App() {
   const takeoff = () => {
     if (battery <= 2) return;
     setMode("MANUAL");
-    setMissionState("MANUAL");
+    setMissionState("TAKING_OFF");
   };
 
   const land = () => {
-    setMissionState("LANDED");
-    setSpeed(0);
+    if (missionState === "MANUAL") setMissionState("LANDING");
   };
 
   useEffect(() => {
