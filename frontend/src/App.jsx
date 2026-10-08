@@ -56,6 +56,12 @@ function useFrameSimulation(position, missionState, controls, setPosition, setHe
 
     if (missionState === "MANUAL") {
       const current = stateRef.current;
+
+      // When the drone is on the ground, only vertical input can start a real takeoff.
+      if (current.y <= 8 && controls.vertical <= 0 && controls.throttle === 0 && controls.strafe === 0 && controls.turn === 0) {
+        setSpeed(0);
+        return;
+      }
       const yaw = controls.yaw * Math.PI / 180;
       let nextHeading = (yaw + controls.turn * TURN_SPEED * dt) * 180 / Math.PI;
       nextHeading = (nextHeading + 360) % 360;
@@ -146,7 +152,7 @@ function PositionEstimator({position,setEstimatedPosition,setSensorError}) {
   return null;
 }
 
-function ControllerOverlay({connected, mode, setMode, onTakeoff, onLand, setVirtual}) {
+function ControllerOverlay({connected, mode, setMode, onTakeoff, onLand, setVirtual, speed, battery}) {
   const press = (name,value) => (event) => {
     event.preventDefault();
     setVirtual(name,value);
@@ -161,7 +167,8 @@ function ControllerOverlay({connected, mode, setMode, onTakeoff, onLand, setVirt
     background:"rgba(5,18,14,.72)",color:"#d9ffe8",fontSize:20,touchAction:"none",userSelect:"none"
   };
   return <div style={{position:"absolute",inset:0,pointerEvents:"none",fontFamily:"monospace"}}>
-    <div style={{position:"absolute",top:14,left:14,pointerEvents:"auto",display:"flex",gap:8,alignItems:"center"}}>
+    <div style={{position:"absolute",top:14,left:14,pointerEvents:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+
       <button onClick={()=>setMode(mode==="MANUAL"?"AUTONOMOUS":"MANUAL")} style={{...btn,width:"auto",height:38,padding:"0 12px",fontSize:11}}>
         MODE: {mode}
       </button>
@@ -191,8 +198,12 @@ function ControllerOverlay({connected, mode, setMode, onTakeoff, onLand, setVirt
       <button style={btn} onPointerDown={press("turn",1)} onPointerUp={release("turn")} onPointerCancel={release("turn")}>↷</button>
     </div>
 
-    <div style={{position:"absolute",bottom:10,left:"50%",transform:"translateX(-50%)",color:"rgba(230,255,240,.75)",fontSize:10,pointerEvents:"none"}}>
-      W/S = forward/back • A/D = strafe • Q/E = rotate • R/F = altitude • Space = takeoff • L = land
+    <div style={{position:"absolute",bottom:10,left:"50%",transform:"translateX(-50%)",color:"rgba(230,255,240,.75)",fontSize:10,pointerEvents:"none",textAlign:"center"}}>
+      LEFT STICK = MOVE • RIGHT STICK = ROTATE • LB/RB = ALTITUDE • A = TAKEOFF • B = LAND • W/S/A/D = KEYBOARD
+    </div>
+
+    <div style={{position:"absolute",top:60,left:14,color:"#d9ffe8",fontSize:11,pointerEvents:"none",background:"rgba(0,0,0,.38)",padding:"7px 9px",borderRadius:7}}>
+      SPEED {speed.toFixed(0)} m/s &nbsp; BAT {battery.toFixed(0)}%
     </div>
   </div>;
 }
@@ -200,6 +211,7 @@ function ControllerOverlay({connected, mode, setMode, onTakeoff, onLand, setVirt
 function useController() {
   const [connected,setConnected] = useState(false);
   const [virtual,setVirtualState] = useState({throttle:0,strafe:0,vertical:0,turn:0});
+  const [actions,setActions] = useState({takeoff:false,land:false});
   const keys = useRef(new Set());
   const gamepad = useRef(null);
   const [tick, setTick] = useState(0);
@@ -254,22 +266,36 @@ function useController() {
     const gp = gamepad.current;
     if (gp) {
       const dead = (v) => Math.abs(v) < 0.12 ? 0 : v;
+
+      // Standard XInput layout:
+      // Left stick = horizontal movement, right stick = heading/rotation.
       throttle = -dead(gp.axes?.[1] ?? 0) || throttle;
       strafe = dead(gp.axes?.[0] ?? 0) || strafe;
       turn = dead(gp.axes?.[2] ?? 0) || turn;
+
+      // LB/RB control altitude.
       vertical = (gp.buttons?.[5]?.pressed ? 1 : 0) - (gp.buttons?.[4]?.pressed ? 1 : 0) || vertical;
+
+      // A = takeoff, B = land.
+      setActions({
+        takeoff: Boolean(gp.buttons?.[0]?.pressed),
+        land: Boolean(gp.buttons?.[1]?.pressed)
+      });
+    } else {
+      setActions({takeoff:false,land:false});
     }
 
     return {throttle,strafe,vertical,turn};
   },[virtual,tick]);
 
   return {connected,controls:{
+
     throttle: controls.throttle || virtual.throttle,
     strafe: controls.strafe || virtual.strafe,
     vertical: controls.vertical || virtual.vertical,
     turn: controls.turn || virtual.turn,
     yaw: 0
-  },setVirtual};
+  },setVirtual,actions};
 }
 
 export default function App() {
@@ -281,7 +307,7 @@ export default function App() {
   const [estimatedPosition,setEstimatedPosition]=useState({...HOME});
   const [sensorError,setSensorError]=useState(0);
   const [mode,setMode]=useState("MANUAL");
-  const {connected,controls,setVirtual}=useController();
+  const {connected,controls,setVirtual,actions}=useController();
 
   const distance=useMemo(()=>Math.hypot(position.x-TARGET.x,position.y-TARGET.y,position.z-TARGET.z),[position]);
 
@@ -297,8 +323,13 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (actions.takeoff && missionState === "LANDED") takeoff();
+    if (actions.land && missionState === "MANUAL") land();
+  }, [actions.takeoff, actions.land, missionState]);
+
+  useEffect(() => {
     if (mode === "AUTONOMOUS" && missionState === "LANDED") setMissionState("AUTONOMOUS");
-  }, [mode]);
+  }, [mode, missionState]);
 
   return <div style={{position:"fixed",inset:0,width:"100vw",height:"100vh",overflow:"hidden",background:"#000"}}>
     <PositionEstimator position={position} setEstimatedPosition={setEstimatedPosition} setSensorError={setSensorError}/>
@@ -315,6 +346,8 @@ export default function App() {
       onTakeoff={takeoff}
       onLand={land}
       setVirtual={setVirtual}
+      speed={speed}
+      battery={battery}
     />
   </div>;
 }
