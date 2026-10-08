@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>navigate_x_navigation</name>
+  <version>0.1.0</version>
+  <description>NAVIGATE-X GPS-denied navigation, mapping adapters, and PX4 offboard control.</description>
+  <maintainer email="navigate-x@example.com">NAVIGATE-X</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>px4_msgs</exec_depend>
+</package>
