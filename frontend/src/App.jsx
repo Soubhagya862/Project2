@@ -86,7 +86,35 @@ function useFrameSimulation(position, heading, missionState, controls, setPositi
       return;
     }
 
-    if (missionState === "TAKING_OFF") {\n      const current = stateRef.current;\n      const nextY = Math.min(35, current.y + 35 * dt);\n      const next = {x: current.x, y: nextY, z: current.z};\n      stateRef.current = next;\n      setPosition(next);\n      setSpeed(35);\n      if (nextY >= 34.9) setMissionState("MANUAL");\n      return;\n    }\n\n    if (missionState === "LANDING") {\n      const current = stateRef.current;\n      const nextY = Math.max(8, current.y - 30 * dt);\n      const next = {x: current.x, y: nextY, z: current.z};\n      stateRef.current = next;\n      setPosition(next);\n      setSpeed(30);\n      if (nextY <= 8.01) {\n        const landed = {...next, y: 8};\n        stateRef.current = landed;\n        setPosition(landed);\n        setSpeed(0);\n        setMissionState("LANDED");\n      }\n      return;\n    }\n\n    if (missionState !== "AUTONOMOUS" && missionState !== "RETURNING" && missionState !== "MANUAL") {
+    if (missionState === "TAKING_OFF") {
+      const current = stateRef.current;
+      const nextY = Math.min(35, current.y + 35 * dt);
+      const next = {x: current.x, y: nextY, z: current.z};
+      stateRef.current = next;
+      setPosition(next);
+      setSpeed(35);
+      if (nextY >= 34.9) setMissionState("MANUAL");
+      return;
+    }
+
+    if (missionState === "LANDING") {
+      const current = stateRef.current;
+      const nextY = Math.max(8, current.y - 30 * dt);
+      const next = {x: current.x, y: nextY, z: current.z};
+      stateRef.current = next;
+      setPosition(next);
+      setSpeed(30);
+      if (nextY <= 8.01) {
+        const landed = {...next, y: 8};
+        stateRef.current = landed;
+        setPosition(landed);
+        setSpeed(0);
+        setMissionState("LANDED");
+      }
+      return;
+    }
+
+    if (missionState !== "AUTONOMOUS" && missionState !== "RETURNING" && missionState !== "MANUAL") {
       setSpeed(0);
       return;
     }
