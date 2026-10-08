@@ -1,0 +1,15 @@
+navigate_x:
+  ros__parameters:
+    gps_required: false
+    localization_source: fast_lio2
+    mapping_backend: octomap
+    planner: frontier
+    safety_distance_m: 1.5
+    max_horizontal_speed_mps: 3.0
+    max_vertical_speed_mps: 1.5
+    return_home_after_mission: true
+    landing_wait_seconds: 10
+    lidar_topic: /livox/lidar
+    imu_topic: /imu/data
+    camera_topic: /camera/image_raw
+    odometry_topic: /fast_lio/odometry
