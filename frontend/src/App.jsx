@@ -14,7 +14,7 @@ function Drone({ position, heading }) {
 
   useFrame((_, dt) => {
     if (!group.current) return;
-    group.current.rotation.y = THREE.MathUtils.lerp(group.current.rotation.y, heading, dt * 7);
+    group.current.rotation.y = THREE.MathUtils.lerp(group.current.rotation.y, heading * Math.PI / 180, dt * 7);
     rotors.current.forEach((r) => {
       if (r) r.rotation.y += dt * 35;
     });
@@ -78,7 +78,28 @@ function Marker({ point, type }) {
   );
 }
 
-function MonitorScene({ position, heading }) {
+function SimulationEngine({
+  position,
+  missionState,
+  setPosition,
+  setHeading,
+  setSpeed,
+  setBattery,
+  setMissionState
+}) {
+  useFrameSimulation(
+    position,
+    missionState,
+    setPosition,
+    setHeading,
+    setSpeed,
+    setBattery,
+    setMissionState
+  );
+  return null;
+}
+
+function MonitorScene({ position, heading, missionState, setPosition, setHeading, setSpeed, setBattery, setMissionState }) {
   const camera = useRef();
 
   useFrame((_, dt) => {
@@ -94,12 +115,20 @@ function MonitorScene({ position, heading }) {
 
   return (
     <>
+      <SimulationEngine
+        position={position}
+        missionState={missionState}
+        setPosition={setPosition}
+        setHeading={setHeading}
+        setSpeed={setSpeed}
+        setBattery={setBattery}
+        setMissionState={setMissionState}
+      />
       <PerspectiveCamera ref={camera} makeDefault position={[520, 520, 620]} fov={48} />
       <ambientLight intensity={1.5} />
       <directionalLight position={[300, 600, 200]} intensity={2.4} castShadow />
       <Grid args={[3000, 3000]} cellSize={50} sectionSize={250} fadeDistance={2500} />
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-
         <planeGeometry args={[3000, 3000]} />
         <meshStandardMaterial color="#20362a" roughness={1} />
       </mesh>
@@ -133,6 +162,90 @@ function addNoise(value, amount = SENSOR_NOISE) {
   return value + (Math.random() - 0.5) * amount;
 }
 
+function PositionEstimator({ position, setEstimatedPosition, setSensorError }) {
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setEstimatedPosition({
+        x: addNoise(position.x),
+        y: addNoise(position.y),
+        z: addNoise(position.z)
+      });
+      setSensorError(
+        Math.sqrt(
+          Math.pow(addNoise(position.x) - position.x, 2) +
+          Math.pow(addNoise(position.y) - position.y, 2) +
+          Math.pow(addNoise(position.z) - position.z, 2)
+        )
+      );
+    }, 250);
+
+    return () => clearInterval(timer);
+  }, [position.x, position.y, position.z, setEstimatedPosition, setSensorError]);
+
+  return null;
+}
+
+function MissionProgress({ distance, totalMissionDistance, setRouteProgress }) {
+  useEffect(() => {
+    const progress = Math.max(
+      0,
+      Math.min(100, ((totalMissionDistance - distance) / totalMissionDistance) * 100)
+    );
+    setRouteProgress(progress);
+  }, [distance, totalMissionDistance, setRouteProgress]);
+
+  return null;
+}
+
+function useFrameSimulation(
+  position,
+  missionState,
+  setPosition,
+  setHeading,
+  setSpeed,
+  setBattery,
+  setMissionState
+) {
+  const stateRef = useRef(position);
+
+  useFrame((_, dt) => {
+    if (!stateRef.current) stateRef.current = { ...position };
+
+    if (missionState !== "AUTONOMOUS" && missionState !== "RETURNING") {
+      setSpeed(0);
+      return;
+    }
+
+    const target = missionState === "RETURNING" ? HOME : TARGET;
+    const current = stateRef.current;
+    const dx = target.x - current.x;
+    const dy = target.y - current.y;
+    const dz = target.z - current.z;
+    const distance = Math.hypot(dx, dy, dz);
+
+    if (distance < 8) {
+      stateRef.current = { ...target };
+      setPosition({ ...target });
+      setSpeed(0);
+      setMissionState("LANDED");
+      return;
+    }
+
+    const step = Math.min(distance, CRUISE_SPEED * dt);
+    const nx = current.x + (dx / distance) * step;
+    const ny = current.y + (dy / distance) * step;
+    const nz = current.z + (dz / distance) * step;
+
+    stateRef.current = { x: nx, y: ny, z: nz };
+    setPosition({ x: nx, y: ny, z: nz });
+    setSpeed(step / Math.max(dt, 0.001));
+
+    const newHeading = Math.atan2(-dx, -dz) * (180 / Math.PI);
+    setHeading((newHeading + 360) % 360);
+    setBattery((b) => Math.max(0, b - dt * 0.018));
+  });
+}
+
 export default function App() {
   const [gpsDenied, setGpsDenied] = useState(true);
   const [position, setPosition] = useState({ ...HOME });
@@ -160,36 +273,6 @@ export default function App() {
     TARGET.z - HOME.z
   );
 
-  useFrameSimulation(position, missionState, setPosition, setHeading, setSpeed, setBattery, setMissionState);
-
-  // Simulated onboard estimator: GPS is not used here.
-  useMemo(() => {
-    const timer = setInterval(() => {
-      setEstimatedPosition((old) => ({
-        x: addNoise(position.x),
-        y: addNoise(position.y),
-        z: addNoise(position.z),
-      }));
-      setSensorError(
-        Math.hypot(
-          estimatedPosition.x - position.x,
-          estimatedPosition.y - position.y,
-          estimatedPosition.z - position.z
-        )
-      );
-    }, 250);
-
-    return () => clearInterval(timer);
-  }, [position.x, position.y, position.z]);
-
-  useMemo(() => {
-    const progress = Math.max(
-      0,
-      Math.min(100, ((totalMissionDistance - distance) / totalMissionDistance) * 100)
-    );
-    setRouteProgress(progress);
-  }, [distance, totalMissionDistance]);
-
   const startMission = () => {
     if (missionState === "READY" || missionState === "LANDED" || missionState === "COMPLETE") {
       setMissionState("AUTONOMOUS");
@@ -214,6 +297,17 @@ export default function App() {
 
   return (
     <div className="app">
+      <PositionEstimator
+        position={position}
+        setEstimatedPosition={setEstimatedPosition}
+        setSensorError={setSensorError}
+      />
+      <MissionProgress
+        distance={distance}
+        totalMissionDistance={totalMissionDistance}
+        setRouteProgress={setRouteProgress}
+      />
+
       <header className="topbar">
         <div>
           <h1>NAVIGATE-X <span>◈</span></h1>
@@ -234,25 +328,15 @@ export default function App() {
             <small>Move the simulated vehicle using onboard estimation instead of GPS.</small>
           </div>
 
-          <button className="primary-button" onClick={startMission}>
-            START AUTONOMOUS
-          </button>
-          <button className="primary-button" onClick={returnHome}>
-            EMERGENCY RETURN
-          </button>
-          <button className="mode" onClick={resetMission}>
-            RESET MISSION
-          </button>
+          <button className="primary-button" onClick={startMission}>START AUTONOMOUS</button>
+          <button className="primary-button" onClick={returnHome}>EMERGENCY RETURN</button>
+          <button className="mode" onClick={resetMission}>RESET MISSION</button>
 
           <div className="control-card">
             <div className="section-label">NAVIGATION MODE</div>
-            <button className={missionState === "AUTONOMOUS" ? "mode active" : "mode"}>
-              AUTONOMOUS
-            </button>
+            <button className={missionState === "AUTONOMOUS" ? "mode active" : "mode"}>AUTONOMOUS</button>
             <button className="mode">MANUAL</button>
-            <button className={missionState === "RETURNING" ? "mode emergency active" : "mode emergency"}>
-              RETURN HOME
-            </button>
+            <button className={missionState === "RETURNING" ? "mode emergency active" : "mode emergency"}>RETURN HOME</button>
           </div>
 
           <div className="control-card">
@@ -260,9 +344,7 @@ export default function App() {
             <button className="gps-toggle" onClick={() => setGpsDenied((v) => !v)}>
               {gpsDenied ? "GPS IS OFF" : "GPS IS ON"}
             </button>
-            <small>
-              Position estimation continues from simulated onboard sensors.
-            </small>
+            <small>Position estimation continues from simulated onboard sensors.</small>
           </div>
 
           <div className="mission-card">
@@ -293,7 +375,16 @@ export default function App() {
             <Canvas shadows>
               <color attach="background" args={["#07131c"]} />
               <fog attach="fog" args={["#07131c", 700, 2200]} />
-              <MonitorScene position={position} heading={heading} />
+              <MonitorScene
+                position={position}
+                heading={heading}
+                missionState={missionState}
+                setPosition={setPosition}
+                setHeading={setHeading}
+                setSpeed={setSpeed}
+                setBattery={setBattery}
+                setMissionState={setMissionState}
+              />
             </Canvas>
 
             <div className="monitor-hud">
@@ -354,61 +445,10 @@ export default function App() {
           <div className="accuracy-card">
             <span>POSITION ESTIMATION ERROR</span>
             <strong>{sensorError.toFixed(2)} m</strong>
-            <small>
-              Ground-truth simulation position is compared with the noisy estimated position.
-            </small>
+            <small>Ground-truth simulation position is compared with the noisy estimated position.</small>
           </div>
         </aside>
       </main>
     </div>
   );
-}
-
-function useFrameSimulation(
-  position,
-  missionState,
-  setPosition,
-  setHeading,
-  setSpeed,
-  setBattery,
-  setMissionState
-) {
-  const stateRef = useRef(position);
-
-  useFrame((_, dt) => {
-    if (!stateRef.current) stateRef.current = { ...position };
-
-    if (missionState !== "AUTONOMOUS" && missionState !== "RETURNING") {
-      setSpeed(0);
-      return;
-    }
-
-    const target = missionState === "RETURNING" ? HOME : TARGET;
-    const current = stateRef.current;
-    const dx = target.x - current.x;
-    const dy = target.y - current.y;
-    const dz = target.z - current.z;
-    const distance = Math.hypot(dx, dy, dz);
-
-    if (distance < 8) {
-      stateRef.current = { ...target };
-      setPosition({ ...target });
-      setSpeed(0);
-      setMissionState(missionState === "RETURNING" ? "LANDED" : "LANDED");
-      return;
-    }
-
-    const step = Math.min(distance, CRUISE_SPEED * dt);
-    const nx = current.x + (dx / distance) * step;
-    const ny = current.y + (dy / distance) * step;
-    const nz = current.z + (dz / distance) * step;
-
-    stateRef.current = { x: nx, y: ny, z: nz };
-    setPosition({ x: nx, y: ny, z: nz });
-    setSpeed(step / Math.max(dt, 0.001));
-
-    const newHeading = Math.atan2(-dx, -dz) * (180 / Math.PI);
-    setHeading((newHeading + 360) % 360);
-    setBattery((b) => Math.max(0, b - dt * 0.018));
-  });
 }
