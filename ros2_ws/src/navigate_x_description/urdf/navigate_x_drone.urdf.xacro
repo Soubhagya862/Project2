@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="navigate_x_drone">
+  <link name="base_link">
+    <inertial>
+      <mass value="1.5"/>
+      <inertia ixx="0.03" ixy="0" ixz="0" iyy="0.03" iyz="0" izz="0.05"/>
+    </inertial>
+    <visual><geometry><box size="0.55 0.55 0.16"/></geometry></visual>
+    <collision><geometry><box size="0.55 0.55 0.16"/></geometry></collision>
+  </link>
+  <link name="lidar_link">
+    <visual><geometry><cylinder radius="0.055" length="0.07"/></geometry></visual>
+  </link>
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/><child link="lidar_link"/>
+    <origin xyz="0 0 0.13"/>
+  </joint>
+  <link name="camera_link">
+    <visual><geometry><box size="0.09 0.09 0.06"/></geometry></visual>
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/><child link="camera_link"/>
+    <origin xyz="0.22 0 -0.02"/>
+  </joint>
+</robot>
