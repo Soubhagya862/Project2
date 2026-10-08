@@ -1,0 +1,17 @@
+build/
+install/
+log/
+.colcon/
+*.bag
+*.db3
+__pycache__/
+*.pyc
+.venv/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.csv
+*.mcap
+*.pcd
+*.ply
