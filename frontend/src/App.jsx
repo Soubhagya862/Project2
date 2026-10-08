@@ -3,7 +3,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Grid, PerspectiveCamera } from "@react-three/drei";
 import * as THREE from "three";
 
-const HOME = { x: 0, y: 30, z: 0 };
+const HOME = { x: 0, y: 8, z: 0 };
 const TARGET = { x: 1400, y: 120, z: -1100 };
 const CRUISE_SPEED = 95;
 const MANUAL_SPEED = 90;
@@ -47,7 +47,7 @@ function ThirdPersonGameCamera({ position, heading }) {
   return <PerspectiveCamera ref={camera} makeDefault fov={68} near={0.1} far={3500}/>;
 }
 
-function useFrameSimulation(position, missionState, controls, setPosition, setHeading, setSpeed, setBattery, setMissionState) {
+function useFrameSimulation(position, heading, missionState, controls, setPosition, setHeading, setSpeed, setBattery, setMissionState) {
   const stateRef = useRef(position);
   useEffect(() => { stateRef.current = position; }, [position]);
 
@@ -62,7 +62,7 @@ function useFrameSimulation(position, missionState, controls, setPosition, setHe
         setSpeed(0);
         return;
       }
-      const yaw = controls.yaw * Math.PI / 180;
+      const yaw = heading * Math.PI / 180;
       let nextHeading = (yaw + controls.turn * TURN_SPEED * dt) * 180 / Math.PI;
       nextHeading = (nextHeading + 360) % 360;
 
@@ -86,7 +86,7 @@ function useFrameSimulation(position, missionState, controls, setPosition, setHe
       return;
     }
 
-    if (missionState !== "AUTONOMOUS" && missionState !== "RETURNING") {
+    if (missionState === "TAKING_OFF") {\n      const current = stateRef.current;\n      const nextY = Math.min(35, current.y + 35 * dt);\n      const next = {x: current.x, y: nextY, z: current.z};\n      stateRef.current = next;\n      setPosition(next);\n      setSpeed(35);\n      if (nextY >= 34.9) setMissionState("MANUAL");\n      return;\n    }\n\n    if (missionState === "LANDING") {\n      const current = stateRef.current;\n      const nextY = Math.max(8, current.y - 30 * dt);\n      const next = {x: current.x, y: nextY, z: current.z};\n      stateRef.current = next;\n      setPosition(next);\n      setSpeed(30);\n      if (nextY <= 8.01) {\n        const landed = {...next, y: 8};\n        stateRef.current = landed;\n        setPosition(landed);\n        setSpeed(0);\n        setMissionState("LANDED");\n      }\n      return;\n    }\n\n    if (missionState !== "AUTONOMOUS" && missionState !== "RETURNING" && missionState !== "MANUAL") {
       setSpeed(0);
       return;
     }
@@ -115,7 +115,7 @@ function useFrameSimulation(position, missionState, controls, setPosition, setHe
 }
 
 function SimulationEngine(props) {
-  useFrameSimulation(props.position,props.missionState,props.controls,props.setPosition,props.setHeading,props.setSpeed,props.setBattery,props.setMissionState);
+  useFrameSimulation(props.position,props.heading,props.missionState,props.controls,props.setPosition,props.setHeading,props.setSpeed,props.setBattery,props.setMissionState);
   return null;
 }
 
