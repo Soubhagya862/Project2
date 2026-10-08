@@ -28,16 +28,36 @@ function Drone({ position, heading }) {
   </group>;
 }
 
-function DroneVisionCamera({ position, heading }) {
+function ThirdPersonGameCamera({ position, heading }) {
   const camera = useRef();
-  useFrame(() => {
+  const desired = useRef(new THREE.Vector3());
+
+  useFrame((_, dt) => {
     if (!camera.current) return;
+
     const yaw = heading * Math.PI / 180;
-    const forward = new THREE.Vector3(-Math.sin(yaw), -0.04, -Math.cos(yaw)).normalize();
-    camera.current.position.set(position.x + forward.x * 7, position.y + 3, position.z + forward.z * 7);
-    camera.current.lookAt(position.x + forward.x * 180, position.y + forward.y * 180, position.z + forward.z * 180);
+    const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).normalize();
+
+    // Camera stays behind and above the drone, like a third-person game camera.
+    desired.current.set(
+      position.x - forward.x * 58,
+      position.y + 28,
+      position.z - forward.z * 58
+    );
+
+    const follow = 1 - Math.exp(-dt * 5.5);
+    camera.current.position.lerp(desired.current, follow);
+
+    const lookTarget = new THREE.Vector3(
+      position.x + forward.x * 55,
+      position.y - 3,
+      position.z + forward.z * 55
+    );
+
+    camera.current.lookAt(lookTarget);
   });
-  return <PerspectiveCamera ref={camera} makeDefault fov={88} near={0.1} far={3500}/>;
+
+  return <PerspectiveCamera ref={camera} makeDefault fov={68} near={0.1} far={3500}/>;
 }
 
 function useFrameSimulation(position, missionState, setPosition, setHeading, setSpeed, setBattery, setMissionState) {
@@ -74,7 +94,7 @@ function Environment() {
 
 function Scene(props) {
   return <>
-    <DroneVisionCamera position={props.position} heading={props.heading}/>
+    <ThirdPersonGameCamera position={props.position} heading={props.heading}/>
     <ambientLight intensity={1.1}/><directionalLight position={[300,700,200]} intensity={2.1}/>
     <Environment/>
     <Drone position={props.position} heading={props.heading}/>
@@ -116,21 +136,10 @@ export default function App() {
   return <div style={{position:"fixed",inset:0,width:"100vw",height:"100vh",overflow:"hidden",background:"#000"}}>
     <PositionEstimator position={position} setEstimatedPosition={setEstimatedPosition} setSensorError={setSensorError}/>
     <Canvas shadows gl={{antialias:true}} style={{width:"100vw",height:"100vh",display:"block"}}>
-      <color attach="background" args={["#050b08"]}/>
-      <fog attach="fog" args={["#050b08",250,2800]}/>
+      <color attach="background" args={["#101a24"]}/>
+      <fog attach="fog" args={["#101a24",350,3200]}/>
       <Scene position={position} heading={heading} missionState={missionState} setPosition={setPosition} setHeading={setHeading} setSpeed={setSpeed} setBattery={setBattery} setMissionState={setMissionState}/>
     </Canvas>
 
-    <div style={{position:"absolute",top:16,left:16,padding:"7px 11px",border:"1px solid rgba(120,255,170,.28)",borderRadius:6,background:"rgba(0,20,10,.42)",color:"#b7ffd0",fontFamily:"monospace",fontSize:12,letterSpacing:1}}>
-      DRONE VISION • GPS DENIED • VPS ACTIVE
-    </div>
-    <div style={{position:"absolute",left:16,bottom:16,padding:"7px 11px",borderRadius:6,background:"rgba(0,0,0,.45)",color:"#b7ffd0",fontFamily:"monospace",fontSize:12}}>
-      {missionState} | {speed.toFixed(0)} m/s | {distance.toFixed(0)} m TO TARGET | BAT {battery.toFixed(0)}%
-    </div>
-    <div style={{position:"absolute",top:16,right:16,width:9,height:9,borderRadius:"50%",background:"#65ff9c",boxShadow:"0 0 14px #65ff9c"}}/>
-    <div style={{position:"absolute",inset:0,pointerEvents:"none",background:"radial-gradient(circle at center,transparent 45%,rgba(0,0,0,.38) 100%),repeating-linear-gradient(0deg,rgba(120,255,160,.035) 0px,rgba(120,255,160,.035) 1px,transparent 1px,transparent 4px)"}}/>
-    <div style={{position:"absolute",left:"50%",top:"50%",width:24,height:24,transform:"translate(-50%,-50%)",pointerEvents:"none"}}>
-      <span style={{position:"absolute",left:11,top:0,width:2,height:8,background:"rgba(170,255,200,.7)"}}/><span style={{position:"absolute",left:11,bottom:0,width:2,height:8,background:"rgba(170,255,200,.7)"}}/><span style={{position:"absolute",left:0,top:11,width:8,height:2,background:"rgba(170,255,200,.7)"}}/><span style={{position:"absolute",right:0,top:11,width:8,height:2,background:"rgba(170,255,200,.7)"}}/>
-    </div>
   </div>;
 }
