@@ -202,6 +202,7 @@ function useController() {
   const [virtual,setVirtualState] = useState({throttle:0,strafe:0,vertical:0,turn:0});
   const keys = useRef(new Set());
   const gamepad = useRef(null);
+  const [tick, setTick] = useState(0);
 
   const setVirtual = (name,value) => {
     setVirtualState(v => ({...v,[name]:value}));
@@ -217,12 +218,25 @@ function useController() {
     const connect = (e) => { gamepad.current=e.gamepad; setConnected(true); };
     const disconnect = () => { gamepad.current=null; setConnected(false); };
 
+    const existing = navigator.getGamepads ? Array.from(navigator.getGamepads()).find(Boolean) : null;
+    if (existing) { gamepad.current = existing; setConnected(true); }
+
+    const timer = setInterval(() => {
+      if (gamepad.current && navigator.getGamepads) {
+        const pads = Array.from(navigator.getGamepads());
+        const live = pads.find((p) => p && p.index === gamepad.current.index);
+        if (live) gamepad.current = live;
+      }
+      setTick((v) => v + 1);
+    }, 50);
+
     window.addEventListener("keydown",down);
     window.addEventListener("keyup",up);
     window.addEventListener("gamepadconnected",connect);
     window.addEventListener("gamepaddisconnected",disconnect);
 
     return () => {
+      clearInterval(timer);
       window.removeEventListener("keydown",down);
       window.removeEventListener("keyup",up);
       window.removeEventListener("gamepadconnected",connect);
@@ -247,7 +261,7 @@ function useController() {
     }
 
     return {throttle,strafe,vertical,turn};
-  },[virtual]);
+  },[virtual,tick]);
 
   return {connected,controls:{
     throttle: controls.throttle || virtual.throttle,
