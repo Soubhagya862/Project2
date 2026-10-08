@@ -1,1 +1,0 @@
-export default function TargetMarker({position}){return <group position={[position.x,position.y,position.z]}><mesh><sphereGeometry args={[2,20,20]}/><meshStandardMaterial/></mesh><mesh rotation={[Math.PI/2,0,0]}><ringGeometry args={[2.8,3.1,32]}/><meshStandardMaterial/></mesh></group>}
